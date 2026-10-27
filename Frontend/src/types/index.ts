@@ -176,6 +176,19 @@ export interface StudentMarkItem {
   gradedAt?: string | null;
 }
 
+export interface PendingTask {
+  id: string;
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  title: string;
+  instructions: string;
+  dueAt: string;
+  maxMarks: number;
+  allowLate: boolean;
+  isOverdue: boolean;
+}
+
 export interface MarksSummary {
   totalObtained: number;
   totalMax: number;

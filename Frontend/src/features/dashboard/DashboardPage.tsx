@@ -20,82 +20,48 @@ import {
   FileText
 } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui/index.js';
-import { Course, Announcement } from '../../types/index.js';
+import { Course, Announcement, PendingTask } from '../../types/index.js';
 import { API_BASE_URL, api } from '../../lib/api.js';
-import { formatDate, formatRelativeTime } from '../../lib/utils.js';
+import { formatDateTime, formatRelativeTime } from '../../lib/utils.js';
 
 export const DashboardPage: React.FC = () => {
   const { user, role } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
+  const [studentAverage, setStudentAverage] = useState<number | null>(null);
   const [adminStats, setAdminStats] = useState<{ users: number | null; grievances: number | null; connected: boolean }>({ users: null, grievances: null, connected: false });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       setLoading(true);
-      try {
-        if (role === 'admin') {
-          const [usersResult, grievancesResult, health] = await Promise.allSettled([
-            api.getUsersAdmin(),
-            api.getAdminComplaints('open'),
-            fetch(`${API_BASE_URL}/health`).then(response => response.ok)
-          ]);
-          setAdminStats({
-            users: usersResult.status === 'fulfilled' ? usersResult.value.length : null,
-            grievances: grievancesResult.status === 'fulfilled' ? grievancesResult.value.length : null,
-            connected: health.status === 'fulfilled' && health.value
-          });
-        }
-        const [myCourses, annList] = await Promise.all([
-          (role === 'admin' ? api.getAllCoursesAdmin() : api.getMyCourses()).catch(() => [
-            {
-              id: 'c0000000-0000-0000-0000-000000000002',
-              code: 'WEB302',
-              title: 'Modern Web Technologies',
-              description: 'Full-stack application architecture using React, Node.js, and Supabase.',
-              isArchived: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              studentsCount: 4
-            },
-            {
-              id: 'c0000000-0000-0000-0000-000000000001',
-              code: 'CS101',
-              title: 'Introduction to Computer Science',
-              description: 'Foundations of computing, data structures, and algorithmic problem solving.',
-              isArchived: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              studentsCount: 3
-            }
-          ]),
-          api.getAnnouncements().catch(() => [
-            {
-              id: 'ann-1',
-              authorId: 'a1',
-              title: 'Welcome to GUTech Fall 2026 Academic Term',
-              body: 'Please ensure your profile is verified and check upcoming deadlines.',
-              isPinned: true,
-              authorName: 'Dr. Farooq Al-Balushi',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }
-          ])
-        ]);
-
-        setCourses(myCourses);
-        setAnnouncements(annList.slice(0, 4));
-      } finally {
-        setLoading(false);
+      const [courseResult, announcementResult, taskResult, marksResult, adminResult] = await Promise.allSettled([
+        role === 'admin' ? api.getAllCoursesAdmin() : api.getMyCourses(),
+        api.getAnnouncements(),
+        role === 'student' ? api.getPendingTasks() : Promise.resolve([]),
+        role === 'student' ? api.getStudentMarks() : Promise.resolve(null),
+        role === 'admin' ? Promise.allSettled([api.getUsersAdmin(), api.getAdminComplaints('open'), fetch(`${API_BASE_URL}/health`).then(response => response.ok)]) : Promise.resolve(null)
+      ]);
+      setCourses(courseResult.status === 'fulfilled' ? courseResult.value : []);
+      const announcementList = announcementResult.status === 'fulfilled' ? announcementResult.value : [];
+      setAnnouncementCount(announcementList.length);
+      setAnnouncements(announcementList.slice(0, 4));
+      setPendingTasks(taskResult.status === 'fulfilled' ? taskResult.value : []);
+      setStudentAverage(marksResult.status === 'fulfilled' && marksResult.value ? marksResult.value.summary.percentage : null);
+      if (role === 'admin' && adminResult.status === 'fulfilled' && adminResult.value) {
+        const [usersResult, grievancesResult, health] = adminResult.value;
+        setAdminStats({ users: usersResult.status === 'fulfilled' ? usersResult.value.length : null, grievances: grievancesResult.status === 'fulfilled' ? grievancesResult.value.length : null, connected: health.status === 'fulfilled' && health.value });
       }
+      setLoading(false);
     };
 
-    loadDashboardData();
+    void loadDashboardData();
   }, [role]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter" aria-busy={loading}>
       {/* Welcome Hero Banner */}
       <div className="relative rounded-3xl bg-gradient-to-r from-navy-950 via-navy-900 to-navy-800 p-6 sm:p-8 text-white shadow-xl overflow-hidden border border-navy-800">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gold-400/10 rounded-full blur-3xl pointer-events-none" />
@@ -153,15 +119,13 @@ export const DashboardPage: React.FC = () => {
               </div>
             </Card>
 
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Pending Tasks</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">1</p>
-              </div>
-            </Card>
+            <Link to="/tasks" aria-label={`View ${pendingTasks.length} pending assignments`} className="block rounded-2xl transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2">
+              <Card className="flex items-center gap-4 transition-[border-color,box-shadow] hover:border-amber-300 hover:shadow-md">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold"><Clock className="w-6 h-6" aria-hidden="true" /></div>
+                <div><p className="text-xs font-semibold text-slate-400">Pending Tasks</p><p className="text-xl font-extrabold tabular-nums text-navy-950 mt-0.5">{loading ? '—' : pendingTasks.length}</p></div>
+                <ArrowRight className="ml-auto h-4 w-4 text-slate-400" aria-hidden="true" />
+              </Card>
+            </Link>
 
             <Card className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
@@ -169,19 +133,19 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Current Average</p>
-                <p className="text-xl font-extrabold text-emerald-600 mt-0.5">92.4%</p>
+                <p className="text-xl font-extrabold text-emerald-600 mt-0.5">{loading ? '—' : studentAverage === null ? '—' : `${studentAverage}%`}</p>
               </div>
             </Card>
 
-            <Card className="flex items-center gap-4">
+            <Link to="/announcements" className="block rounded-2xl transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2" aria-label={`View ${announcementCount} announcements`}><Card className="flex items-center gap-4 transition-[border-color,box-shadow] hover:border-purple-200 hover:shadow-md">
               <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
                 <Bell className="w-6 h-6" />
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Announcements</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{announcements.length}</p>
+                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p>
               </div>
-            </Card>
+            </Card></Link>
           </>
         ) : role === 'teacher' ? (
           <>
@@ -317,35 +281,17 @@ export const DashboardPage: React.FC = () => {
 
         {/* Right Column: Notices & Upcoming (1/3 width) */}
         <div className="space-y-6">
-          {/* Upcoming Deadlines Widget for Students / Teachers */}
+          {/* Actionable Student Deadlines */}
           <Card>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-amber-600" />
-                <h3 className="text-xs font-bold text-navy-950 uppercase tracking-wider">Upcoming Deadlines</h3>
+                <h3 className="text-xs font-bold text-navy-950 uppercase tracking-wider">{role === 'student' ? 'Pending Work' : 'Get Started'}</h3>
               </div>
-              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                Active
-              </span>
+              {role === 'student' && <Link to="/tasks" className="text-[11px] font-bold text-navy-700 hover:text-navy-950">View all</Link>}
             </div>
 
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-navy-900">Assignment 1: RESTful API</span>
-                  <Badge variant="warning" size="sm">7 Days</Badge>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">WEB302 · Express & Supabase</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-navy-900">Quiz 1: HTTP Protocols</span>
-                  <Badge variant="success" size="sm">Available</Badge>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">15 Minutes timed assessment</p>
-              </div>
-            </div>
+            {role === 'student' ? loading ? <div className="space-y-2" role="status" aria-live="polite"><span className="sr-only">Loading pending assignments…</span><div className="h-16 animate-pulse rounded-xl bg-slate-100" /><div className="h-16 animate-pulse rounded-xl bg-slate-100" /></div> : pendingTasks.length ? <div className="space-y-2">{pendingTasks.slice(0, 3).map(task => <Link key={task.id} to={`/courses/${task.courseId}?tab=assignments&assignmentId=${task.id}`} className="group block rounded-xl border border-slate-200/70 bg-slate-50 p-3 transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"><div className="flex items-start justify-between gap-2"><span className="min-w-0 text-xs font-bold text-navy-900 group-hover:text-navy-700">{task.title}</span><Badge variant={task.isOverdue ? 'danger' : 'warning'} size="sm">{task.isOverdue ? 'Overdue' : 'Pending'}</Badge></div><p className="mt-1 text-[11px] text-slate-500">{task.courseCode} · Due {formatDateTime(task.dueAt)}</p></Link>)}</div> : <p className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">You’re all caught up. No assignments are waiting for submission.</p> : <div className="space-y-3"><p className="text-sm text-slate-600">Open a class to review assignments, resources, and announcements.</p><Link to="/courses" className="inline-flex items-center gap-2 text-sm font-bold text-navy-800 hover:text-navy-600">Browse classes <ArrowRight className="h-4 w-4" /></Link></div>}
           </Card>
 
           {/* Announcements Feed */}
@@ -362,15 +308,16 @@ export const DashboardPage: React.FC = () => {
 
             <div className="space-y-3">
               {announcements.map(ann => (
-                <div key={ann.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/60 hover:bg-slate-100/60 transition-colors">
+                <Link key={ann.id} to={`/announcements?announcementId=${encodeURIComponent(ann.id)}`} className="group block rounded-xl bg-slate-50 border border-slate-200/60 p-3 transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-navy-200 hover:bg-slate-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500">
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-xs font-bold text-navy-950 line-clamp-1">{ann.title}</p>
-                    {ann.isPinned && <span className="text-[10px] text-gold-600 font-bold">📌 Pinned</span>}
+                    {ann.isPinned && <span className="text-[10px] text-gold-700 font-bold">Pinned</span>}
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{ann.body}</p>
                   <p className="text-[10px] text-slate-400 mt-2">{formatRelativeTime(ann.createdAt)}</p>
-                </div>
+                </Link>
               ))}
+              {!loading && announcements.length === 0 && <p className="text-sm text-slate-500">No announcements have been posted yet.</p>}
             </div>
           </Card>
         </div>

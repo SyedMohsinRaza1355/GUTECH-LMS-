@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   BookOpen,
   Award,
+  ListChecks,
   MessageSquare,
   Users,
   User,
@@ -95,6 +96,21 @@ export const AppLayout: React.FC = () => {
           <BookOpen className="w-5 h-5" />
           <span>Courses</span>
         </NavLink>
+
+        {role === 'student' ? (
+          <NavLink
+            to="/tasks"
+            className={({ isActive }) =>
+              cn(
+                'flex flex-col items-center gap-1 p-2 rounded-xl text-[10px] font-semibold transition-colors',
+                isActive ? 'text-navy-900 font-bold' : 'text-slate-500 hover:text-slate-800'
+              )
+            }
+          >
+            <ListChecks className="w-5 h-5" />
+            <span>Tasks</span>
+          </NavLink>
+        ) : null}
 
         {role === 'student' ? (
           <NavLink

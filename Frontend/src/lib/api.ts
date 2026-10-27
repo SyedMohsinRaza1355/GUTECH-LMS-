@@ -13,7 +13,8 @@ import {
   ChatMessage,
   Complaint,
   StudentMarkItem,
-  MarksSummary
+  MarksSummary,
+  PendingTask
 } from '../types/index.js';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
@@ -275,6 +276,10 @@ class ApiClient {
   async getStudentMarks(courseId?: string): Promise<{ items: StudentMarkItem[]; summary: MarksSummary }> {
     const url = courseId ? `/me/marks?courseId=${courseId}` : '/me/marks';
     return this.request<{ items: StudentMarkItem[]; summary: MarksSummary }>(url);
+  }
+
+  async getPendingTasks(): Promise<PendingTask[]> {
+    return this.request<PendingTask[]>('/me/tasks');
   }
 
   async getCourseGradebook(courseId: string): Promise<{ course: any; columns: any[]; rows: any[] }> {

@@ -3,6 +3,7 @@
 // ==============================================================================
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.js';
 import {
   Bell,
@@ -20,6 +21,8 @@ import { formatDate, formatDateTime, formatRelativeTime } from '../../lib/utils.
 
 export const AnnouncementsPage: React.FC = () => {
   const { user, role } = useAuth();
+  const [searchParams] = useSearchParams();
+  const focusAnnouncementId = searchParams.get('announcementId');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -73,6 +76,17 @@ export const AnnouncementsPage: React.FC = () => {
   useEffect(() => {
     fetchAnnouncements();
   }, []);
+
+  useEffect(() => {
+    if (loading || !focusAnnouncementId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`announcement-${focusAnnouncementId}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      target.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, announcements, focusAnnouncementId]);
 
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,7 +161,9 @@ export const AnnouncementsPage: React.FC = () => {
           {filtered.map(ann => (
             <Card
               key={ann.id}
-              className={`hover:border-navy-300 transition-all ${
+              id={`announcement-${ann.id}`}
+              tabIndex={focusAnnouncementId === ann.id ? -1 : undefined}
+              className={`transition-[border-color,box-shadow] hover:border-navy-300 hover:shadow-md ${focusAnnouncementId === ann.id ? 'border-gold-400 ring-2 ring-gold-300/70' : ''} ${
                 ann.isPinned ? 'border-gold-300/80 bg-gradient-to-r from-white via-white to-gold-50/20' : ''
               }`}
             >

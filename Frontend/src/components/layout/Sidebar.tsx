@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   BookOpen,
   Award,
+  ListChecks,
   MessageSquare,
   Bell,
   LifeBuoy,
@@ -44,6 +45,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
       to: '/marks',
       label: 'My Marks & GPA',
       icon: Award,
+      roles: ['student']
+    },
+    {
+      to: '/tasks',
+      label: 'Pending Work',
+      icon: ListChecks,
       roles: ['student']
     },
     {

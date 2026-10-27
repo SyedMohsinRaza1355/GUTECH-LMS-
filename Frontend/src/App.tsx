@@ -16,6 +16,7 @@ import { AnnouncementsPage } from './features/announcements/AnnouncementsPage.js
 import { GlobalChatPage } from './features/chat/GlobalChatPage.js';
 import { ComplaintsPage } from './features/complaints/ComplaintsPage.js';
 import { UsersPage } from './features/admin/UsersPage.js';
+import { TasksPage } from './features/tasks/TasksPage.js';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -82,6 +83,7 @@ export const App: React.FC = () => {
             <Route path="courses" element={<CourseListPage />} />
             <Route path="courses/:id" element={<CourseDetailPage />} />
             <Route path="marks" element={<RoleRoute roles={['student']}><MarksPage /></RoleRoute>} />
+            <Route path="tasks" element={<RoleRoute roles={['student']}><TasksPage /></RoleRoute>} />
             <Route path="chat" element={<RoleRoute roles={['student', 'teacher']}><GlobalChatPage /></RoleRoute>} />
             <Route path="announcements" element={<AnnouncementsPage />} />
             <Route path="complaints" element={<ComplaintsPage />} />

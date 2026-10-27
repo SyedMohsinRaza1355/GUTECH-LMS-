@@ -4,7 +4,7 @@
 // ==============================================================================
 
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.js';
 import {
   BookOpen,
@@ -50,9 +50,12 @@ type CourseTab = 'overview' | 'resources' | 'assignments' | 'quizzes' | 'chat' |
 
 export const CourseDetailPage: React.FC = () => {
   const { id: courseId } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { user, role } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<CourseTab>('overview');
+  const requestedTab = searchParams.get('tab');
+  const selectedAssignmentId = searchParams.get('assignmentId');
+  const [activeTab, setActiveTab] = useState<CourseTab>(() => requestedTab && ['overview', 'resources', 'assignments', 'quizzes', 'chat', 'announcements', 'gradebook', 'students'].includes(requestedTab) ? requestedTab as CourseTab : 'overview');
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -109,12 +112,28 @@ export const CourseDetailPage: React.FC = () => {
 
   // Fetch initial data
   useEffect(() => {
+    if (requestedTab && ['overview', 'resources', 'assignments', 'quizzes', 'chat', 'announcements', 'gradebook', 'students'].includes(requestedTab)) setActiveTab(requestedTab as CourseTab);
+  }, [requestedTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'assignments' || !selectedAssignmentId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`assignment-${selectedAssignmentId}`);
+      if (target) {
+        target.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+        target.focus({ preventScroll: true });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, assignments, selectedAssignmentId]);
+
+  useEffect(() => {
     if (!courseId) return;
 
     const loadData = async () => {
       setLoading(true);
       try {
-        const [cDetail, rList, aList, qList, annList, mList] = await Promise.all([
+        const [cDetail, rList, aList, qList, annList] = await Promise.all([
           api.getCourseDetail(courseId).catch(() => ({
             id: courseId,
             code: 'WEB302',
@@ -128,8 +147,7 @@ export const CourseDetailPage: React.FC = () => {
           api.getCourseResources(courseId).catch(() => []),
           api.getCourseAssignments(courseId).catch(() => []),
           api.getCourseQuizzes(courseId).catch(() => []),
-          api.getAnnouncements(courseId).catch(() => []),
-          api.getChatMessages(courseId).catch(() => [])
+          api.getAnnouncements(courseId).catch(() => [])
         ]);
 
         setCourse(cDetail);
@@ -137,11 +155,6 @@ export const CourseDetailPage: React.FC = () => {
         setAssignments(aList);
         setQuizzes(qList);
         setCourseAnnouncements(annList);
-        setChatMessages(mList);
-
-        if (role === 'teacher' || role === 'admin') {
-          api.getCourseGradebook(courseId).then(setGradebookData).catch(() => null);
-        }
       } finally {
         setLoading(false);
       }
@@ -149,6 +162,16 @@ export const CourseDetailPage: React.FC = () => {
 
     loadData();
   }, [courseId, role]);
+
+  useEffect(() => {
+    if (!courseId || activeTab !== 'chat') return;
+    api.getChatMessages(courseId).then(setChatMessages).catch(() => setChatMessages([]));
+  }, [courseId, activeTab]);
+
+  useEffect(() => {
+    if (!courseId || activeTab !== 'gradebook' || (role !== 'teacher' && role !== 'admin')) return;
+    api.getCourseGradebook(courseId).then(setGradebookData).catch(() => setGradebookData(null));
+  }, [courseId, activeTab, role]);
 
   // Quiz Timer Countdown effect
   useEffect(() => {
@@ -474,7 +497,7 @@ export const CourseDetailPage: React.FC = () => {
               const isGraded = sub && sub.marksObtained !== null && sub.marksObtained !== undefined;
 
               return (
-                <Card key={a.id} className="hover:border-navy-300 transition-all">
+                  <Card id={`assignment-${a.id}`} key={a.id} tabIndex={selectedAssignmentId === a.id ? -1 : undefined} className={`scroll-mt-24 transition-[border-color,box-shadow] duration-200 ${selectedAssignmentId === a.id ? 'border-gold-400 ring-2 ring-gold-300 shadow-lg' : 'hover:border-navy-300'}`}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div>
                       <div className="flex items-center gap-2 mb-1">

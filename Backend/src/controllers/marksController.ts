@@ -8,6 +8,36 @@ import { notFound, forbidden } from '../utils/errors.js';
 import { StudentMarkItem } from '../types/index.js';
 import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
 
+export const getStudentTasks = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user;
+    if (!user || user.role !== 'student') return next(forbidden('Only students can view pending tasks'));
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const { data: enrollments, error: enrollmentError } = await supabaseAdmin.from('enrollments').select('course_id').eq('student_id', user.id);
+      if (enrollmentError) throw enrollmentError;
+      const courseIds = (enrollments || []).map(row => row.course_id);
+      if (!courseIds.length) return res.status(200).json({ data: [] });
+      const { data: assignments, error } = await supabaseAdmin.from('assignments').select('id,course_id,title,instructions,due_at,max_marks,allow_late,submissions!left(id,submitted_at)').in('course_id', courseIds).eq('submissions.student_id', user.id).order('due_at');
+      if (error) throw error;
+      const { data: courses, error: coursesError } = await supabaseAdmin.from('courses').select('id,code,title').in('id', courseIds);
+      if (coursesError) throw coursesError;
+      const courseById = new Map((courses || []).map(course => [course.id, course]));
+      const now = Date.now();
+      return res.status(200).json({ data: (assignments || []).filter(item => !(item.submissions || []).length).map(item => {
+        const course = courseById.get(item.course_id);
+        return { id: item.id, courseId: item.course_id, courseCode: course?.code || '', courseTitle: course?.title || '', title: item.title, instructions: item.instructions, dueAt: item.due_at, maxMarks: Number(item.max_marks), allowLate: item.allow_late, isOverdue: Date.parse(item.due_at) < now };
+      }) });
+    }
+    const tasks = mockDb.assignments.filter(item => mockDb.enrollments.some(enrollment => enrollment.courseId === item.courseId && enrollment.studentId === user.id) && !mockDb.submissions.some(submission => submission.assignmentId === item.id && submission.studentId === user.id)).map(item => {
+      const course = mockDb.courses.find(entry => entry.id === item.courseId);
+      return { id: item.id, courseId: item.courseId, courseCode: course?.code || '', courseTitle: course?.title || '', title: item.title, instructions: item.instructions, dueAt: item.dueAt, maxMarks: item.maxMarks, allowLate: item.allowLate, isOverdue: Date.parse(item.dueAt) < Date.now() };
+    }).sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+    return res.status(200).json({ data: tasks });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getStudentMarks = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user;
