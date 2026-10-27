@@ -1,0 +1,8 @@
+-- Demo accounts use Supabase Auth so passwords are hashed and verified by Auth.
+-- Do not insert passwords into a public database table.
+--
+-- From the Backend directory run:
+--   npm run db:seed-demo
+--
+-- That idempotent script provisions the 12 sample Auth users, profile rows,
+-- courses, course-teacher assignments, and student enrollments.
