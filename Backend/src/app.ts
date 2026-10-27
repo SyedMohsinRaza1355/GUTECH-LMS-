@@ -12,6 +12,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 
 export const app = express();
 
+// Vercel's Express runtime uses the default export as the serverless handler.
+export default app;
+
 // Security Headers
 app.use(helmet());
 
