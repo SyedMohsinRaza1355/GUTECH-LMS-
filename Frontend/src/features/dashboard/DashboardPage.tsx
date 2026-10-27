@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui/index.js';
 import { Course, Announcement } from '../../types/index.js';
-import { api } from '../../lib/api.js';
+import { API_BASE_URL, api } from '../../lib/api.js';
 import { formatDate, formatRelativeTime } from '../../lib/utils.js';
 
 export const DashboardPage: React.FC = () => {
@@ -39,7 +39,7 @@ export const DashboardPage: React.FC = () => {
           const [usersResult, grievancesResult, health] = await Promise.allSettled([
             api.getUsersAdmin(),
             api.getAdminComplaints('open'),
-            fetch('/api/health').then(response => response.ok)
+            fetch(`${API_BASE_URL}/health`).then(response => response.ok)
           ]);
           setAdminStats({
             users: usersResult.status === 'fulfilled' ? usersResult.value.length : null,

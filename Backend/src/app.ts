@@ -15,6 +15,9 @@ export const app = express();
 // Vercel's Express runtime uses the default export as the serverless handler.
 export default app;
 
+// Trust Vercel's single reverse-proxy hop so express-rate-limit can identify clients.
+app.set('trust proxy', 1);
+
 // Security Headers
 app.use(helmet());
 

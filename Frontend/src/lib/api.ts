@@ -16,7 +16,7 @@ import {
   MarksSummary
 } from '../types/index.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 class ApiClient {
   private getToken(): string | null {
