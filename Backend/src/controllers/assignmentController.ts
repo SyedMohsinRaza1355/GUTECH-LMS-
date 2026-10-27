@@ -6,12 +6,40 @@ import { Request, Response, NextFunction } from 'express';
 import { mockDb } from '../repositories/mockDb.js';
 import { notFound, forbidden, conflict, unprocessable } from '../utils/errors.js';
 import { Assignment, Submission } from '../types/index.js';
+import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
 
 export const listAssignments = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params; // courseId
     const user = req.user;
     if (!user) return next(forbidden());
+
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const membership = user.role === 'admin' ? { data: true, error: null } : user.role === 'teacher'
+        ? await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', id).eq('teacher_id', user.id).maybeSingle()
+        : await supabaseAdmin.from('enrollments').select('course_id').eq('course_id', id).eq('student_id', user.id).maybeSingle();
+      if (membership.error) throw membership.error;
+      if (!membership.data) return next(forbidden('Access denied'));
+
+      const { data: rows, error } = await supabaseAdmin.from('assignments').select('*').eq('course_id', id).order('due_at');
+      if (error) throw error;
+      const assignmentIds = (rows || []).map(row => row.id);
+      let submissionQuery = supabaseAdmin.from('submissions').select('*').in('assignment_id', assignmentIds.length ? assignmentIds : ['00000000-0000-0000-0000-000000000000']);
+      if (user.role === 'student') submissionQuery = submissionQuery.eq('student_id', user.id);
+      const { data: submissions, error: submissionError } = await submissionQuery;
+      if (submissionError) throw submissionError;
+      return res.status(200).json({ data: (rows || []).map(row => {
+        const related = (submissions || []).filter(submission => submission.assignment_id === row.id);
+        const mine = user.role === 'student' ? related[0] : null;
+        return {
+          id: row.id, courseId: row.course_id, createdBy: row.created_by, title: row.title,
+          instructions: row.instructions, maxMarks: Number(row.max_marks), dueAt: row.due_at,
+          allowLate: row.allow_late, attachmentPath: row.attachment_path,
+          createdAt: row.created_at, updatedAt: row.updated_at, submissionsCount: related.length,
+          mySubmission: mine ? { id: mine.id, assignmentId: mine.assignment_id, studentId: mine.student_id, textAnswer: mine.text_answer, filePath: mine.file_path, submittedAt: mine.submitted_at, isLate: mine.is_late, marksObtained: mine.marks_obtained === null ? null : Number(mine.marks_obtained), feedback: mine.feedback, gradedBy: mine.graded_by, gradedAt: mine.graded_at } : null
+        };
+      }) });
+    }
 
     const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
     const isEnrolled = mockDb.enrollments.some(e => e.courseId === id && e.studentId === user.id);

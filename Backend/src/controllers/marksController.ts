@@ -6,11 +6,46 @@ import { Request, Response, NextFunction } from 'express';
 import { mockDb } from '../repositories/mockDb.js';
 import { notFound, forbidden } from '../utils/errors.js';
 import { StudentMarkItem } from '../types/index.js';
+import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
 
 export const getStudentMarks = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = req.user;
     if (!user) return next(forbidden());
+
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const courseId = req.query.courseId as string | undefined;
+      const { data: enrollmentRows, error: enrollmentError } = await supabaseAdmin.from('enrollments').select('course_id').eq('student_id', user.id);
+      if (enrollmentError) throw enrollmentError;
+      const enrolledIds = (enrollmentRows || []).map(row => row.course_id);
+      const allowedIds = courseId ? enrolledIds.filter(id => id === courseId) : enrolledIds;
+      const noIds = ['00000000-0000-0000-0000-000000000000'];
+      const ids = allowedIds.length ? allowedIds : noIds;
+      const [{ data: courses, error: coursesError }, { data: assignments, error: assignmentsError }, { data: quizzes, error: quizzesError }] = await Promise.all([
+        supabaseAdmin.from('courses').select('id,code,title').in('id', ids),
+        supabaseAdmin.from('assignments').select('id,course_id,title,max_marks,submissions(*)').in('course_id', ids),
+        supabaseAdmin.from('quizzes').select('id,course_id,title,quiz_questions(marks),quiz_attempts!inner(id,student_id,score,submitted_at)').in('course_id', ids).eq('quiz_attempts.student_id', user.id).eq('is_published', true)
+      ]);
+      if (coursesError) throw coursesError;
+      if (assignmentsError) throw assignmentsError;
+      if (quizzesError) throw quizzesError;
+      const courseById = new Map((courses || []).map(course => [course.id, course]));
+      const items: StudentMarkItem[] = [];
+      for (const assignment of assignments || []) {
+        const submission = (assignment.submissions || []).find((entry: any) => entry.student_id === user.id);
+        const course = courseById.get(assignment.course_id);
+        items.push({ studentId: user.id, courseId: assignment.course_id, courseTitle: course ? `${course.code}: ${course.title}` : '', kind: 'assignment', itemId: assignment.id, title: assignment.title, obtained: submission?.marks_obtained === null || submission?.marks_obtained === undefined ? null : Number(submission.marks_obtained), max: Number(assignment.max_marks), gradedAt: submission?.graded_at || null });
+      }
+      for (const quiz of quizzes || []) {
+        const attempt = quiz.quiz_attempts?.[0];
+        const course = courseById.get(quiz.course_id);
+        items.push({ studentId: user.id, courseId: quiz.course_id, courseTitle: course ? `${course.code}: ${course.title}` : '', kind: 'quiz', itemId: quiz.id, title: quiz.title, obtained: attempt?.score === null || attempt?.score === undefined ? null : Number(attempt.score), max: (quiz.quiz_questions || []).reduce((sum: number, question: any) => sum + Number(question.marks), 0), gradedAt: attempt?.submitted_at || null });
+      }
+      const graded = items.filter(item => item.obtained !== null && item.obtained !== undefined);
+      const totalObtained = graded.reduce((sum, item) => sum + Number(item.obtained), 0);
+      const totalMax = graded.reduce((sum, item) => sum + item.max, 0);
+      return res.status(200).json({ data: { items, summary: { totalObtained, totalMax, percentage: totalMax ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0, gradedCount: graded.length, pendingCount: items.length - graded.length } } });
+    }
 
     // Security Rule: Student can ONLY view their own marks
     const studentId = user.id;

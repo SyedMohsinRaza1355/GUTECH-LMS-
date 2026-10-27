@@ -6,12 +6,48 @@ import { Request, Response, NextFunction } from 'express';
 import { mockDb } from '../repositories/mockDb.js';
 import { notFound, forbidden, conflict, badRequest } from '../utils/errors.js';
 import { Quiz, QuizQuestion, QuizAttempt } from '../types/index.js';
+import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
 
 export const listCourseQuizzes = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params; // courseId
     const user = req.user;
     if (!user) return next(forbidden());
+
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const membership = user.role === 'admin' ? { data: true, error: null } : user.role === 'teacher'
+        ? await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', id).eq('teacher_id', user.id).maybeSingle()
+        : await supabaseAdmin.from('enrollments').select('course_id').eq('course_id', id).eq('student_id', user.id).maybeSingle();
+      if (membership.error) throw membership.error;
+      if (!membership.data) return next(forbidden('Access denied'));
+      let query = supabaseAdmin.from('quizzes').select('*').eq('course_id', id).order('opens_at');
+      if (user.role === 'student') query = query.eq('is_published', true);
+      const { data: rows, error } = await query;
+      if (error) throw error;
+      const quizIds = (rows || []).map(row => row.id);
+      const [{ data: questions, error: questionError }, { data: attempts, error: attemptError }] = await Promise.all([
+        supabaseAdmin.from('quiz_questions').select('quiz_id,marks').in('quiz_id', quizIds.length ? quizIds : ['00000000-0000-0000-0000-000000000000']),
+        user.role === 'student'
+          ? supabaseAdmin.from('quiz_attempts').select('id,quiz_id,student_id,started_at,submitted_at,answers,score').in('quiz_id', quizIds.length ? quizIds : ['00000000-0000-0000-0000-000000000000']).eq('student_id', user.id)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+      if (questionError) throw questionError;
+      if (attemptError) throw attemptError;
+      const now = Date.now();
+      return res.status(200).json({ data: (rows || []).map(row => {
+        const quizQuestions = (questions || []).filter(question => question.quiz_id === row.id);
+        const attempt = (attempts || []).find(item => item.quiz_id === row.id);
+        return {
+          id: row.id, courseId: row.course_id, createdBy: row.created_by, title: row.title,
+          description: row.description, timeLimitMinutes: row.time_limit_minutes,
+          opensAt: row.opens_at, closesAt: row.closes_at, isPublished: row.is_published,
+          createdAt: row.created_at, updatedAt: row.updated_at,
+          status: now < Date.parse(row.opens_at) ? 'upcoming' : now > Date.parse(row.closes_at) ? 'ended' : 'active',
+          questionsCount: quizQuestions.length, totalMarks: quizQuestions.reduce((sum, question) => sum + Number(question.marks), 0),
+          myAttempt: attempt ? { id: attempt.id, quizId: attempt.quiz_id, studentId: attempt.student_id, startedAt: attempt.started_at, submittedAt: attempt.submitted_at, answers: attempt.answers, score: attempt.score === null ? null : Number(attempt.score) } : null
+        };
+      }) });
+    }
 
     const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
     const isEnrolled = mockDb.enrollments.some(e => e.courseId === id && e.studentId === user.id);
