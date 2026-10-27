@@ -83,6 +83,8 @@ export const CourseDetailPage: React.FC = () => {
   const [gradeModalOpen, setGradeModalOpen] = useState(false);
   const [activeAssignmentForGrading, setActiveAssignmentForGrading] = useState<Assignment | null>(null);
   const [gradingSubmissions, setGradingSubmissions] = useState<any[]>([]);
+  const [loadingGradingAssignmentId, setLoadingGradingAssignmentId] = useState<string | null>(null);
+  const [gradingError, setGradingError] = useState('');
   const [selectedSubForGrading, setSelectedSubForGrading] = useState<any | null>(null);
   const [gradingMarksInput, setGradingMarksInput] = useState<number>(0);
   const [gradingFeedbackInput, setGradingFeedbackInput] = useState<string>('');
@@ -252,9 +254,18 @@ export const CourseDetailPage: React.FC = () => {
 
   const handleOpenGradingDesk = async (assign: Assignment) => {
     setActiveAssignmentForGrading(assign);
-    const data = await api.getAssignmentSubmissions(assign.id);
-    setGradingSubmissions(data.submissions);
     setGradeModalOpen(true);
+    setGradingError('');
+    setGradingSubmissions([]);
+    setLoadingGradingAssignmentId(assign.id);
+    try {
+      const data = await api.getAssignmentSubmissions(assign.id);
+      setGradingSubmissions(data.submissions);
+    } catch (error) {
+      setGradingError(error instanceof Error ? error.message : 'Could not load student submissions.');
+    } finally {
+      setLoadingGradingAssignmentId(null);
+    }
   };
 
   const handleSaveGrade = async (subId: string) => {
@@ -541,9 +552,10 @@ export const CourseDetailPage: React.FC = () => {
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={loadingGradingAssignmentId !== null}
                           onClick={() => handleOpenGradingDesk(a)}
                         >
-                          Grading Desk ({a.submissionsCount || 2})
+                          {loadingGradingAssignmentId === a.id ? 'Loading submissions…' : `Grading Desk (${a.submissionsCount ?? 0})`}
                         </Button>
                       )}
                     </div>
@@ -917,8 +929,15 @@ export const CourseDetailPage: React.FC = () => {
       >
         <div className="space-y-4">
           <p className="text-xs text-slate-500">Student submissions awaiting review and marking:</p>
+          {loadingGradingAssignmentId ? (
+            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600" role="status" aria-live="polite">Loading enrolled student submissions…</div>
+          ) : gradingError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert"><p className="text-sm font-semibold text-rose-900">Submissions could not load</p><p className="mt-1 text-xs text-rose-800">{gradingError}</p><Button size="sm" className="mt-3" onClick={() => activeAssignmentForGrading && void handleOpenGradingDesk(activeAssignmentForGrading)}>Try again</Button></div>
+          ) : gradingSubmissions.filter(st => st.isSubmitted && st.submission).length === 0 ? (
+            <EmptyState icon={<FileText className="h-6 w-6" />} title="No submissions yet" description="Students have not submitted work for this assignment." />
+          ) : (
           <div className="divide-y divide-slate-100">
-            {gradingSubmissions.map(st => (
+            {gradingSubmissions.filter(st => st.isSubmitted && st.submission).map(st => (
               <div key={st.studentId} className="py-3 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold text-navy-900">{st.studentName}</p>
@@ -947,6 +966,7 @@ export const CourseDetailPage: React.FC = () => {
               </div>
             ))}
           </div>
+          )}
 
           {selectedSubForGrading && (
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 mt-4">
