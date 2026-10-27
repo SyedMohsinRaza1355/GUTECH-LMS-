@@ -77,8 +77,18 @@ export const createResource = async (req: Request, res: Response, next: NextFunc
     const user = req.user;
     if (!user) return next(forbidden());
 
+    const live = isSupabaseConfigured() && user.isDemoUser !== true;
+    if (live) {
+      const { data: teacherLink, error: teacherError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', id).eq('teacher_id', user.id).maybeSingle();
+      if (teacherError) throw teacherError;
+      const { data: course, error: courseError } = await supabaseAdmin.from('courses').select('id').eq('id', id).maybeSingle();
+      if (courseError) throw courseError;
+      if (!course) return next(notFound('Course not found'));
+      if (user.role !== 'admin' && !teacherLink) return next(forbidden('Only instructors assigned to this course can upload resources'));
+    }
+
     const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
-    if (user.role !== 'admin' && !isTeacher) {
+    if (!live && user.role !== 'admin' && !isTeacher) {
       return next(forbidden('Only instructors assigned to this course can upload resources'));
     }
 
@@ -103,12 +113,29 @@ export const createResource = async (req: Request, res: Response, next: NextFunc
       'application/x-zip-compressed'
     ];
 
-    if (!allowedMime.includes(mimeType) && !fileName.endsWith('.pdf')) {
+    if ((file && !allowedMime.includes(mimeType)) || (!file && !allowedMime.includes(mimeType) && !fileName.endsWith('.pdf'))) {
       return next(badRequest('File type not permitted. Allowed: PDF, DOCX, PPTX, Images, ZIP.'));
     }
 
     if (sizeBytes > 25 * 1024 * 1024) {
       return next(badRequest('File exceeds maximum allowable limit of 25 MB'));
+    }
+
+    if (live) {
+      const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${id}/${Date.now()}-${safeFileName}`;
+      // The existing UI currently sends resource metadata only. Store a small valid PDF
+      // for that flow; multipart uploads store their actual file bytes.
+      const content = file?.buffer || createPlaceholderPdf(title, description || 'Course resource');
+      const storedMime = file?.mimetype || 'application/pdf';
+      const { error: storageError } = await supabaseAdmin.storage.from('resources').upload(filePath, content, { contentType: storedMime, upsert: false });
+      if (storageError) throw storageError;
+      const { data, error } = await supabaseAdmin.from('resources').insert({ course_id: id, uploaded_by: user.id, title, description: description || null, file_path: filePath, file_name: fileName, mime_type: storedMime, size_bytes: content.length }).select().single();
+      if (error) {
+        await supabaseAdmin.storage.from('resources').remove([filePath]);
+        throw error;
+      }
+      return res.status(201).json({ data: { id: data.id, courseId: data.course_id, uploadedBy: data.uploaded_by, title: data.title, description: data.description, filePath: data.file_path, fileName: data.file_name, mimeType: data.mime_type, sizeBytes: Number(data.size_bytes), createdAt: data.created_at, uploaderName: user.fullName } });
     }
 
     const newResource: Resource = {
@@ -190,6 +217,18 @@ export const deleteResource = async (req: Request, res: Response, next: NextFunc
     const user = req.user;
     if (!user) return next(forbidden());
 
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const { data: resource, error } = await supabaseAdmin.from('resources').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (!resource) return next(notFound('Resource not found'));
+      if (user.role !== 'admin' && resource.uploaded_by !== user.id) return next(forbidden('You can only delete resources uploaded by yourself'));
+      const { error: storageError } = await supabaseAdmin.storage.from('resources').remove([resource.file_path]);
+      if (storageError) throw storageError;
+      const { error: deleteError } = await supabaseAdmin.from('resources').delete().eq('id', id);
+      if (deleteError) throw deleteError;
+      return res.status(200).json({ data: { message: 'Resource removed successfully' } });
+    }
+
     const resourceIndex = mockDb.resources.findIndex(r => r.id === id);
     if (resourceIndex === -1) return next(notFound('Resource not found'));
 
@@ -207,3 +246,15 @@ export const deleteResource = async (req: Request, res: Response, next: NextFunc
     next(err);
   }
 };
+
+function createPlaceholderPdf(title: string, description: string) {
+  const safe = (value: string) => value.replace(/[^\x20-\x7E]/g, ' ').replace(/[\\()]/g, '\\$&');
+  const stream = `BT /F1 18 Tf 54 740 Td (${safe(title)}) Tj /F1 11 Tf 0 -32 Td (${safe(description)}) Tj ET`;
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${Buffer.byteLength(stream, 'ascii')} >>\nstream\n${stream}\nendstream`];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf, 'ascii')); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xrefOffset = Buffer.byteLength(pdf, 'ascii');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'ascii');
+}

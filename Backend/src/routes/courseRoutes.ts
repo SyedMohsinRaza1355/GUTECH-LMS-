@@ -3,6 +3,7 @@
 // ==============================================================================
 
 import { Router } from 'express';
+import multer from 'multer';
 import { getMyCourses, getCourseDetail } from '../controllers/courseController.js';
 import { listCourseResources, createResource } from '../controllers/resourceController.js';
 import { listAssignments, createAssignment } from '../controllers/assignmentController.js';
@@ -19,6 +20,7 @@ import {
 import { chatRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
+const resourceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 router.use(requireAuth);
 
@@ -27,7 +29,7 @@ router.get('/:id', getCourseDetail);
 
 // Course Resources
 router.get('/:id/resources', listCourseResources);
-router.post('/:id/resources', requireRole('admin', 'teacher'), createResource);
+router.post('/:id/resources', requireRole('admin', 'teacher'), resourceUpload.single('file'), createResource);
 
 // Course Assignments
 router.get('/:id/assignments', listAssignments);

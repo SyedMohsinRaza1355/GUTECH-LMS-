@@ -141,6 +141,50 @@ export const getCourseGradebook = async (req: Request, res: Response, next: Next
     const user = req.user;
     if (!user) return next(forbidden());
 
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const { data: course, error: courseError } = await supabaseAdmin.from('courses').select('id,code,title').eq('id', id).maybeSingle();
+      if (courseError) throw courseError;
+      if (!course) return next(notFound('Course not found'));
+      const { data: teacherLink, error: teacherError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', id).eq('teacher_id', user.id).maybeSingle();
+      if (teacherError) throw teacherError;
+      if (user.role !== 'admin' && !teacherLink) return next(forbidden('Only course teachers and administrators can access the gradebook'));
+      const [{ data: assignments, error: assignmentsError }, { data: quizzes, error: quizzesError }, { data: enrollments, error: enrollmentsError }] = await Promise.all([
+        supabaseAdmin.from('assignments').select('id,title,max_marks,submissions(student_id,marks_obtained)').eq('course_id', id),
+        supabaseAdmin.from('quizzes').select('id,title,quiz_questions(marks),quiz_attempts(student_id,score)').eq('course_id', id),
+        supabaseAdmin.from('enrollments').select('profiles(id,full_name,roll_no)').eq('course_id', id)
+      ]);
+      if (assignmentsError) throw assignmentsError;
+      if (quizzesError) throw quizzesError;
+      if (enrollmentsError) throw enrollmentsError;
+      const columns = [
+        ...(assignments || []).map(item => ({ id: item.id, title: item.title, kind: 'assignment', maxMarks: Number(item.max_marks) })),
+        ...(quizzes || []).map(item => ({ id: item.id, title: item.title, kind: 'quiz', maxMarks: (item.quiz_questions || []).reduce((sum: number, question: any) => sum + Number(question.marks), 0) }))
+      ];
+      const students = (enrollments || []).map((row: any) => row.profiles).filter(Boolean);
+      const rows = students.map((student: any) => {
+        const grades: Record<string, { obtained: number | null; max: number; status: string }> = {};
+        let totalObtained = 0;
+        let totalMax = 0;
+        for (const column of columns) {
+          const assignment = (assignments || []).find(item => item.id === column.id);
+          if (assignment) {
+            const submission = (assignment.submissions || []).find((item: any) => item.student_id === student.id);
+            const graded = submission?.marks_obtained !== null && submission?.marks_obtained !== undefined;
+            grades[column.id] = { obtained: graded ? Number(submission.marks_obtained) : null, max: column.maxMarks, status: graded ? 'graded' : submission ? 'submitted' : 'pending' };
+            if (graded) { totalObtained += Number(submission.marks_obtained); totalMax += column.maxMarks; }
+          } else {
+            const quiz = (quizzes || []).find(item => item.id === column.id)!;
+            const attempt = (quiz.quiz_attempts || []).find((item: any) => item.student_id === student.id);
+            const graded = attempt?.score !== null && attempt?.score !== undefined;
+            grades[column.id] = { obtained: graded ? Number(attempt.score) : null, max: column.maxMarks, status: graded ? 'graded' : attempt ? 'attempted' : 'pending' };
+            if (graded) { totalObtained += Number(attempt.score); totalMax += column.maxMarks; }
+          }
+        }
+        return { studentId: student.id, studentName: student.full_name, studentRollNo: student.roll_no, grades, totalObtained, totalMax, percentage: totalMax ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0 };
+      });
+      return res.status(200).json({ data: { course, columns, rows } });
+    }
+
     const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
     if (user.role !== 'admin' && !isTeacher) {
       return next(forbidden('Only course teachers and administrators can access the gradebook'));

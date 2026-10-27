@@ -98,8 +98,12 @@ function makeDemoPdf(title: string, body: string) {
 async function ensureSemesterActivity() {
   const { data: bucket, error: bucketError } = await supabaseAdmin.storage.getBucket('resources');
   if (bucketError || !bucket) {
-    const { error } = await supabaseAdmin.storage.createBucket('resources', { public: false, fileSizeLimit: '5MB', allowedMimeTypes: ['application/pdf'] });
+    const { error } = await supabaseAdmin.storage.createBucket('resources', { public: false, fileSizeLimit: '25MB', allowedMimeTypes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint', 'image/png', 'image/jpeg', 'application/zip', 'application/x-zip-compressed'] });
     if (error && !String(error.message).toLowerCase().includes('already exists')) throw error;
+  }
+  if (bucket) {
+    const { error } = await supabaseAdmin.storage.updateBucket('resources', { public: false, fileSizeLimit: '25MB', allowedMimeTypes: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.ms-powerpoint', 'image/png', 'image/jpeg', 'application/zip', 'application/x-zip-compressed'] });
+    if (error) throw error;
   }
   const students = mockDb.profiles.filter(profile => profile.role === 'student');
   for (const course of mockDb.courses) {
