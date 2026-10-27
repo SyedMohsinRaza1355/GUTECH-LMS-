@@ -150,7 +150,12 @@ export const AnnouncementsPage: React.FC = () => {
       </div>
 
       {/* Announcements Feed */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="space-y-4" role="status" aria-live="polite">
+          <span className="sr-only">Loading announcements…</span>
+          {[0, 1].map(item => <Card key={item} className="space-y-4"><div className="h-4 w-40 animate-pulse rounded bg-slate-100" /><div className="h-6 w-3/4 animate-pulse rounded bg-slate-100" /><div className="h-16 animate-pulse rounded bg-slate-50" /></Card>)}
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Bell className="w-6 h-6" />}
           title="No notices found"
