@@ -77,7 +77,30 @@ async function ensureDemoCourses() {
 
 const stableId = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
+function makeDemoPdf(title: string, body: string) {
+  const safe = (value: string) => value.replace(/[^\x20-\x7E]/g, ' ').replace(/[\\()]/g, '\\$&');
+  const stream = `BT /F1 18 Tf 54 740 Td (${safe(title)}) Tj /F1 11 Tf 0 -32 Td (${safe(body)}) Tj 0 -24 Td (GUTech LMS Fall 2026 demo resource) Tj ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(stream, 'ascii')} >>\nstream\n${stream}\nendstream`
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf, 'ascii')); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xrefOffset = Buffer.byteLength(pdf, 'ascii');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'ascii');
+}
+
 async function ensureSemesterActivity() {
+  const { data: bucket, error: bucketError } = await supabaseAdmin.storage.getBucket('resources');
+  if (bucketError || !bucket) {
+    const { error } = await supabaseAdmin.storage.createBucket('resources', { public: false, fileSizeLimit: '5MB', allowedMimeTypes: ['application/pdf'] });
+    if (error && !String(error.message).toLowerCase().includes('already exists')) throw error;
+  }
   const students = mockDb.profiles.filter(profile => profile.role === 'student');
   for (const course of mockDb.courses) {
     const index = courseIndex.get(course.code)!;
@@ -153,17 +176,23 @@ async function ensureSemesterActivity() {
     const { error: attemptError } = await supabaseAdmin.from('quiz_attempts').upsert(attemptRows, { onConflict: 'quiz_id,student_id' });
     if (attemptError) throw attemptError;
 
-    const resourceRows = [
+    const resourceSpecs = [
       ['Week 1 Lecture Notes', 'Course introduction and essential vocabulary.', 'week-01-notes.pdf', '2026-09-08T08:00:00Z'],
       ['Week 4 Lecture Slides', 'Lecture slides and worked examples for the first unit.', 'week-04-slides.pdf', '2026-09-29T08:00:00Z'],
       ['Lab Practice Pack', 'Guided practical exercises with review questions.', 'lab-practice.pdf', '2026-10-13T08:00:00Z'],
       ['Mid-Semester Revision Guide', 'Revision checklist and sample questions for the upcoming assessment.', 'revision-guide.pdf', '2026-10-22T08:00:00Z']
-    ].map(([title, description, fileName, createdAt], i) => ({
+    ];
+    const resourceRows = resourceSpecs.map(([title, description, fileName, createdAt], i) => ({
       id: stableId(base + 400 + i), course_id: courseId, uploaded_by: teacherId,
       title: `${course.code}: ${title}`, description,
       file_path: `demo/${course.code.toLowerCase()}/${fileName}`, file_name: fileName,
       mime_type: 'application/pdf', size_bytes: 384000 + i * 120000, created_at: createdAt
     }));
+    for (const [title, description, fileName] of resourceSpecs) {
+      const path = `demo/${course.code.toLowerCase()}/${fileName}`;
+      const { error } = await supabaseAdmin.storage.from('resources').upload(path, makeDemoPdf(`${course.code}: ${title}`, description), { contentType: 'application/pdf', upsert: true });
+      if (error) throw error;
+    }
     const { error: resourceError } = await supabaseAdmin.from('resources').upsert(resourceRows, { onConflict: 'id' });
     if (resourceError) throw resourceError;
   }

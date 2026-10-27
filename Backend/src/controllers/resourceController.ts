@@ -143,6 +143,20 @@ export const getResourceDownloadUrl = async (req: Request, res: Response, next: 
     const user = req.user;
     if (!user) return next(forbidden());
 
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      const { data: resource, error } = await supabaseAdmin.from('resources').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (!resource) return next(notFound('Resource not found'));
+      const membership = user.role === 'admin' ? { data: true, error: null } : user.role === 'teacher'
+        ? await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', resource.course_id).eq('teacher_id', user.id).maybeSingle()
+        : await supabaseAdmin.from('enrollments').select('course_id').eq('course_id', resource.course_id).eq('student_id', user.id).maybeSingle();
+      if (membership.error) throw membership.error;
+      if (!membership.data) return next(forbidden('You are not authorized to download this resource'));
+      const { data: signed, error: signedError } = await supabaseAdmin.storage.from('resources').createSignedUrl(resource.file_path, 60);
+      if (signedError) throw signedError;
+      return res.status(200).json({ data: { downloadUrl: signed.signedUrl, expiresInSeconds: 60, fileName: resource.file_name, sizeBytes: Number(resource.size_bytes) } });
+    }
+
     const resource = mockDb.resources.find(r => r.id === id);
     if (!resource) return next(notFound('Resource not found'));
 
