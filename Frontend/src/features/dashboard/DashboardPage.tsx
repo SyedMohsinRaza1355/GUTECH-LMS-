@@ -24,6 +24,17 @@ import { Course, Announcement, PendingTask } from '../../types/index.js';
 import { API_BASE_URL, api } from '../../lib/api.js';
 import { formatDateTime, formatRelativeTime } from '../../lib/utils.js';
 
+type DashboardSnapshot = {
+  courses: Course[];
+  announcements: Announcement[];
+  announcementCount: number;
+  pendingTasks: PendingTask[];
+  studentAverage: number | null;
+  adminStats: { users: number | null; grievances: number | null; connected: boolean };
+};
+
+const dashboardCache = new Map<string, DashboardSnapshot>();
+
 export const DashboardPage: React.FC = () => {
   const { user, role } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -33,10 +44,24 @@ export const DashboardPage: React.FC = () => {
   const [studentAverage, setStudentAverage] = useState<number | null>(null);
   const [adminStats, setAdminStats] = useState<{ users: number | null; grievances: number | null; connected: boolean }>({ users: null, grievances: null, connected: false });
   const [loading, setLoading] = useState(true);
+  const dashboardCacheKey = `${user?.id || ''}:${role || ''}`;
 
   useEffect(() => {
-    const loadDashboardData = async () => {
+    let isCurrent = true;
+    const cached = dashboardCache.get(dashboardCacheKey);
+    if (cached) {
+      setCourses(cached.courses);
+      setAnnouncements(cached.announcements);
+      setAnnouncementCount(cached.announcementCount);
+      setPendingTasks(cached.pendingTasks);
+      setStudentAverage(cached.studentAverage);
+      setAdminStats(cached.adminStats);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    const loadDashboardData = async () => {
       const [courseResult, announcementResult, taskResult, marksResult, adminResult] = await Promise.allSettled([
         role === 'admin' ? api.getAllCoursesAdmin() : api.getMyCourses(),
         api.getAnnouncements(),
@@ -44,21 +69,30 @@ export const DashboardPage: React.FC = () => {
         role === 'student' ? api.getStudentMarks() : Promise.resolve(null),
         role === 'admin' ? Promise.allSettled([api.getUsersAdmin(), api.getAdminComplaints('open'), fetch(`${API_BASE_URL}/health`).then(response => response.ok)]) : Promise.resolve(null)
       ]);
-      setCourses(courseResult.status === 'fulfilled' ? courseResult.value : []);
+      if (!isCurrent) return;
+      const nextCourses = courseResult.status === 'fulfilled' ? courseResult.value : [];
       const announcementList = announcementResult.status === 'fulfilled' ? announcementResult.value : [];
-      setAnnouncementCount(announcementList.length);
-      setAnnouncements(announcementList.slice(0, 4));
-      setPendingTasks(taskResult.status === 'fulfilled' ? taskResult.value : []);
-      setStudentAverage(marksResult.status === 'fulfilled' && marksResult.value ? marksResult.value.summary.percentage : null);
+      const nextTasks = taskResult.status === 'fulfilled' ? taskResult.value : [];
+      const nextAverage = marksResult.status === 'fulfilled' && marksResult.value ? marksResult.value.summary.percentage : null;
+      let nextAdminStats = adminStats;
       if (role === 'admin' && adminResult.status === 'fulfilled' && adminResult.value) {
         const [usersResult, grievancesResult, health] = adminResult.value;
-        setAdminStats({ users: usersResult.status === 'fulfilled' ? usersResult.value.length : null, grievances: grievancesResult.status === 'fulfilled' ? grievancesResult.value.length : null, connected: health.status === 'fulfilled' && health.value });
+        nextAdminStats = { users: usersResult.status === 'fulfilled' ? usersResult.value.length : null, grievances: grievancesResult.status === 'fulfilled' ? grievancesResult.value.length : null, connected: health.status === 'fulfilled' && health.value };
       }
+      const snapshot: DashboardSnapshot = { courses: nextCourses, announcements: announcementList.slice(0, 4), announcementCount: announcementList.length, pendingTasks: nextTasks, studentAverage: nextAverage, adminStats: nextAdminStats };
+      dashboardCache.set(dashboardCacheKey, snapshot);
+      setCourses(snapshot.courses);
+      setAnnouncements(snapshot.announcements);
+      setAnnouncementCount(snapshot.announcementCount);
+      setPendingTasks(snapshot.pendingTasks);
+      setStudentAverage(snapshot.studentAverage);
+      setAdminStats(snapshot.adminStats);
       setLoading(false);
     };
 
     void loadDashboardData();
-  }, [role]);
+    return () => { isCurrent = false; };
+  }, [role, user?.id]);
 
   return (
     <div className="space-y-6 page-enter" aria-busy={loading}>
@@ -115,7 +149,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Enrolled Courses</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{courses.length}</p>
+                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p>
               </div>
             </Card>
 
@@ -155,7 +189,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Assigned Classes</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{courses.length}</p>
+                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p>
               </div>
             </Card>
 
@@ -165,7 +199,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">To Grade</p>
-                <p className="text-xl font-extrabold text-amber-600 mt-0.5">2 Submissions</p>
+                <p className="text-xl font-extrabold text-amber-600 mt-0.5">See courses</p>
               </div>
             </Card>
 
@@ -175,7 +209,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Total Students</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">14 Enrolled</p>
+                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.reduce((count, course) => count + (course.studentsCount || 0), 0)}</p>
               </div>
             </Card>
 
@@ -185,7 +219,7 @@ export const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400">Department Status</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">Active</p>
+                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p>
               </div>
             </Card>
           </>
