@@ -102,18 +102,29 @@ cd ../Frontend
 npm run build
 ```
 
-## Deployment: Vercel frontend + Render API
+## Live deployment: Vercel frontend + API
 
-Deployment files are included: `Frontend/vercel.json` for SPA routing and root `render.yaml` for the Express API. These configure deploys; they do not create accounts, publish the app, or supply credentials.
+The production app is deployed to Vercel as two projects from this repository:
 
-1. Push this project to a GitHub repository. Confirm `git status` does not list `.env` files, `SUPABASE CREDS.txt`, or `Demo Login Credentials.csv`.
-2. In Render, create a Blueprint from the repo and deploy the `gutech-lms-api` web service. Add the Supabase environment variables and a strong `JWT_SECRET` in Render. Set `CLIENT_ORIGIN` to the eventual Vercel production origin.
-3. In Vercel, import the repo and set **Root Directory** to `Frontend`. Set `VITE_API_URL` to `https://<your-render-service>.onrender.com/api`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` only if a frontend feature requires them; the anon key is public by design, and access must be constrained by RLS.
-4. Apply migrations and seed demo accounts against the target Supabase project from a trusted local terminal, not during every web-service startup. Confirm the database project, then run `npm run db:migrate` and `npm run db:seed-demo` in `Backend` with the appropriate local environment.
-5. Add the Vercel production origin to Supabase Auth's allowed redirect/site URLs. Confirm it exactly matches Render's `CLIENT_ORIGIN`, redeploy both services, and check the Render `/api/health` endpoint.
-6. Test real login, admin user listing, a reversible course create/update/delete, and a student request to an admin-only endpoint. Confirm the last returns `403` and no service-role key is exposed in the Vercel build.
+| Project | Vercel root directory | Production URL |
+| --- | --- | --- |
+| React frontend (`gutech-lms`) | `Frontend` | [gutech-lms.vercel.app](https://gutech-lms.vercel.app) |
+| Express API (`gutech-lms-api`) | `Backend` | [gutech-lms-api.vercel.app](https://gutech-lms-api.vercel.app) |
 
-Do not claim a live deployment until the provider dashboards show successful deployments and the browser demo is using those public URLs.
+The API health endpoint is [gutech-lms-api.vercel.app/api/health](https://gutech-lms-api.vercel.app/api/health). Both projects are connected to the public GitHub repository and deploy from `main`: [SyedMohsinRaza1355/GUTECH-LMS-](https://github.com/SyedMohsinRaza1355/GUTECH-LMS-).
+
+Vercel production environment variables are configured in the dashboards. The API keeps `SUPABASE_SERVICE_ROLE_KEY` and `JWT_SECRET` server-side as secrets. The frontend uses `VITE_API_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`; the anon key is public by design and database access must remain constrained by RLS. Do not put the service-role key in any `VITE_` variable or commit `.env` files.
+
+The live Supabase database has 12 demo users (2 admins, 3 teachers, 7 students), three courses, teacher assignments, and student enrollments. To initialize a different Supabase project, confirm it is the intended project, apply migrations, then run the seed script from `Backend`:
+
+```bash
+npm run db:migrate
+npm run db:seed-demo
+```
+
+For local development, run the backend and frontend in separate terminals as described in [Local setup](#local-setup). The deployed API runs on Vercel, so a local backend process is not needed for the production site.
+
+Do not claim a live deployment unless the provider dashboards show successful deployments and the browser demo uses the public URLs above.
 
 ## Submission materials
 
@@ -121,7 +132,11 @@ Do not claim a live deployment until the provider dashboards show successful dep
 - [Timed feature walkthrough plan](docs/DEMO_WALKTHROUGH.md)
 - [AI-assisted workflow summary](docs/AI_ASSISTED_WORKFLOW.md)
 
-The repository URL, deployed URL, and hosted walkthrough video are external deliverables. Add the final links here after publishing them.
+| Deliverable | Link |
+| --- | --- |
+| Public GitHub repository | [SyedMohsinRaza1355/GUTECH-LMS-](https://github.com/SyedMohsinRaza1355/GUTECH-LMS-) |
+| Live portal | [gutech-lms.vercel.app](https://gutech-lms.vercel.app) |
+| Hosted feature walkthrough | Record and upload a 3–5 minute video to YouTube, Loom, or Google Drive, then add its share link here. |
 
 ## Security notes
 
