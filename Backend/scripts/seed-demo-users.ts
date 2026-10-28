@@ -225,6 +225,6 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error('Demo seed failed:', error instanceof Error ? error.message : 'Unknown error');
+  console.error('Demo seed failed:', error instanceof Error ? error.message : JSON.stringify(error));
   process.exitCode = 1;
 });

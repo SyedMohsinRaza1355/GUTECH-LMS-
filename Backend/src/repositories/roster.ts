@@ -62,7 +62,7 @@ const students: RosterEntry[] = studentNames.map(([first, last], index) => {
     `${first}.${last}`.toLowerCase(),
     'student',
     `Student@${100 + n}`,
-    `GUT-2023-${String(100 + n).padStart(4, '0')}`
+    `GUT-2024-${String(100 + n).padStart(4, '0')}`
   );
 });
 
