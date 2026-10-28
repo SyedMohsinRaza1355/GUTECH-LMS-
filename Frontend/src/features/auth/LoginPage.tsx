@@ -81,7 +81,7 @@ export const LoginPage: React.FC = () => {
       <div className="relative w-full max-w-md login-card">
         {/* GU TECH logo */}
         <div className="mb-8 text-center">
-          <Logo variant="lockup" tone="white" className="aurora-orb mx-auto h-auto w-64 sm:w-72" />
+          <Logo variant="lockup" tone="white" className="logo-fade mx-auto h-auto w-64 sm:w-72" />
           <p className="mt-4 text-sm font-semibold tracking-wide text-white">Learning Management Portal</p>
           <p className="mt-0.5 text-xs text-rose-100/70">Internal Academic Portal</p>
         </div>
