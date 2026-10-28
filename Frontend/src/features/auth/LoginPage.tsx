@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext.js';
 import { loginPanelAccounts } from '../../context/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
 import {
-  GraduationCap,
   Eye,
   EyeOff,
   Lock,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button, Input, Modal } from '../../components/ui/index.js';
 import { api } from '../../lib/api.js';
+import { Logo } from '../../components/ui/Logo.js';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -79,16 +79,11 @@ export const LoginPage: React.FC = () => {
       <div className="aurora-orb pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-gold-400/20 blur-3xl" aria-hidden="true" />
       <div className="aurora-orb-slow pointer-events-none absolute -bottom-32 -right-16 h-[28rem] w-[28rem] rounded-full bg-navy-500/40 blur-3xl" aria-hidden="true" />
       <div className="relative w-full max-w-md login-card">
-        {/* GUTech Logo & Title */}
-        <div className="text-center mb-8">
-          <div className="aurora-orb inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-gold-500 to-gold-300 text-navy-950 shadow-gold-glow mb-4">
-            <GraduationCap className="w-9 h-9" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            GUTech <span className="bg-gradient-to-r from-gold-300 to-gold-500 bg-clip-text text-transparent">LMS Portal</span>
-          </h1>
-          <p className="text-sm font-semibold text-slate-100 mt-1">Ghazali University of Technology</p>
-          <p className="text-xs text-slate-400 mt-0.5">Internal Academic Portal</p>
+        {/* GU TECH logo */}
+        <div className="mb-8 text-center">
+          <Logo variant="lockup" tone="white" className="aurora-orb mx-auto h-auto w-64 sm:w-72" />
+          <p className="mt-4 text-sm font-semibold tracking-wide text-white">Learning Management Portal</p>
+          <p className="mt-0.5 text-xs text-rose-100/70">Internal Academic Portal</p>
         </div>
 
         {/* Login Card */}

@@ -17,11 +17,11 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d9bfc1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #b88a8d;
 }
 
 /* Glassmorphism helpers */
@@ -32,7 +32,7 @@
 }
 
 .glass-navy {
-  background: rgba(15, 33, 55, 0.95);
+  background: rgba(42, 10, 14, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -69,7 +69,7 @@
   .stagger > *:nth-child(n+7) { animation-delay: 390ms; }
 
   .card-lift { transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease; }
-  .card-lift:hover { transform: translateY(-3px); box-shadow: 0 22px 44px -18px rgba(15, 33, 55, 0.3); border-color: rgba(245, 158, 11, 0.45); }
+  .card-lift:hover { transform: translateY(-3px); box-shadow: 0 22px 44px -18px rgba(74, 15, 22, 0.32); border-color: rgba(155, 28, 37, 0.35); }
 
   .btn-shine { position: relative; overflow: hidden; }
   .btn-shine::after {
@@ -83,7 +83,7 @@
   .aurora-orb-slow { animation: float-orb 20s ease-in-out infinite reverse; }
   .gradient-flow { background-size: 220% 220%; animation: gradient-flow 16s ease infinite; }
   .login-card { animation: rise-in 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-  .skeleton { background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 37%, #eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+  .skeleton { background: linear-gradient(90deg, #f6ecec 25%, #ead9da 37%, #f6ecec 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
 }
 
 @keyframes modal-pop { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
@@ -96,4 +96,4 @@
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 /* Visible keyboard focus everywhere */
-:focus-visible { outline: 2px solid #D97706; outline-offset: 2px; }
+:focus-visible { outline: 2px solid #9B1C25; outline-offset: 2px; }

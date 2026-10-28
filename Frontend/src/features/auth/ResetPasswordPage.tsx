@@ -1,7 +1,8 @@
 // Landing page for the emailed password-reset link (/reset-password#access_token=...&type=recovery).
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Logo } from '../../components/ui/Logo.js';
 import { Button, Input } from '../../components/ui/index.js';
 import { api } from '../../lib/api.js';
 
@@ -45,9 +46,9 @@ export const ResetPasswordPage: React.FC = () => {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 p-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
         <div className="mb-6 text-center">
-          <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-gold-500 to-gold-300 text-navy-950"><GraduationCap className="h-8 w-8" /></div>
+          <Logo variant="lockup" tone="crimson" className="mx-auto mb-4 h-auto w-48" />
           <h1 className="text-xl font-extrabold text-navy-950">Choose a new password</h1>
-          <p className="mt-1 text-xs text-slate-500">Ghazali University of Technology</p>
+          <p className="mt-1 text-xs text-slate-500">GUTech Learning Portal</p>
         </div>
 
         {!token ? (

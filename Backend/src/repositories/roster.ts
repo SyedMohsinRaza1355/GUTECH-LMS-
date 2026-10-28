@@ -76,8 +76,8 @@ export const loginPanelAccounts: RosterEntry[] = [admins[0], ...teachers, ...stu
 
 export const avatarFor = (entryItem: Pick<RosterEntry, 'fullName' | 'role'>) => {
   const seed = encodeURIComponent(entryItem.fullName.replace(/^(Dr\.|Prof\.|Ms\.|Mr\.)\s+/, '').split(' ')[0]);
-  const style = entryItem.role === 'student' ? 'backgroundColor=F59E0B&textColor=0A1628'
-    : entryItem.role === 'teacher' ? 'backgroundColor=0F2137&textColor=FBBF24'
-    : 'backgroundColor=1E3A5F&textColor=F59E0B';
+  const style = entryItem.role === 'student' ? 'backgroundColor=FDE3E5&textColor=9B1C25'
+    : entryItem.role === 'teacher' ? 'backgroundColor=4A0F16&textColor=F8B4B8'
+    : 'backgroundColor=9B1C25&textColor=FFFFFF';
   return `https://api.dicebear.com/7.x/initials/svg?seed=${seed}&${style}`;
 };

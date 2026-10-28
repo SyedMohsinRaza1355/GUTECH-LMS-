@@ -3,6 +3,7 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
+import { Logo } from '../ui/Logo.js';
 import { useAuth } from '../../context/AuthContext.js';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -11,7 +12,6 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  GraduationCap
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -42,15 +42,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           </button>
 
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-navy-900 to-navy-700 flex items-center justify-center text-gold-400 shadow-md">
-              <GraduationCap className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-base tracking-tight text-navy-950">GUTech</span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gold-400 text-navy-950 uppercase tracking-widest">LMS</span>
-              </div>
-              <p className="hidden sm:block text-[10px] font-medium text-slate-400">Ghazali University of Technology</p>
+            <Logo variant="wordmark" tone="crimson" className="h-7 w-auto sm:h-8" />
+            <div className="hidden border-l border-slate-200 pl-2.5 sm:block">
+              <span className="rounded-md bg-navy-700 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white">LMS</span>
+              <p className="mt-0.5 text-[10px] font-medium leading-none text-slate-400">Learning Portal</p>
             </div>
           </Link>
         </div>

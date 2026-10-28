@@ -26,7 +26,7 @@ export const AppLayout: React.FC = () => {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col antialiased">
+    <div className="min-h-screen bg-[#FAF7F7] flex flex-col antialiased">
       {/* Top Header */}
       <Header onToggleSidebar={() => setSidebarOpen(true)} />
 

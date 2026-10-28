@@ -551,19 +551,23 @@ export const CourseDetailPage: React.FC = () => {
           </Card>
 
           <Card className="space-y-4">
-            <h3 className="text-base font-bold text-navy-900">Instructors & Office Hours</h3>
+            <h3 className="text-base font-bold text-navy-900">Instructors</h3>
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-                <img
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
-                  alt="Faculty"
-                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-200"
-                />
-                <div>
-                  <p className="text-xs font-bold text-navy-900">Prof. Imran Hanif</p>
-                  <p className="text-[11px] text-slate-500">Department of Computer Science</p>
+              {(course.teachers && course.teachers.length > 0) ? course.teachers.map(teacher => (
+                <div key={teacher.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                  <img
+                    src={teacher.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(teacher.fullName)}&backgroundColor=4A0F16&textColor=F8B4B8`}
+                    alt=""
+                    className="h-10 w-10 rounded-xl object-cover ring-2 ring-slate-200"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-navy-900">{teacher.fullName}</p>
+                    <p className="truncate text-[11px] text-slate-500">{teacher.email}</p>
+                  </div>
                 </div>
-              </div>
+              )) : (
+                <p className="text-xs text-slate-500">No instructor has been assigned to this course yet.</p>
+              )}
             </div>
           </Card>
         </div>

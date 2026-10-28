@@ -8,24 +8,30 @@ export default {
   theme: {
     extend: {
       colors: {
+        // "navy" is the primary brand scale, now the GU TECH crimson (brand colour = 700).
         navy: {
-          950: '#070D18',
-          900: '#0A1628',
-          850: '#0F2137',
-          800: '#152C4A',
-          700: '#1E3A5F',
-          600: '#2A4D7B',
-          500: '#3B6A9E',
-          100: '#E8F0FE',
-          50: '#F0F5FD'
+          950: '#2A0A0E',
+          900: '#4A0F16',
+          850: '#5E1219',
+          800: '#7A1520',
+          700: '#9B1C25',
+          600: '#B72A33',
+          500: '#CF4A52',
+          300: '#E8A0A5',
+          200: '#F2C6C9',
+          100: '#FBE4E5',
+          50: '#FEF3F3'
         },
+        // "gold" is the accent scale: a warm blush that sits next to the crimson.
         gold: {
-          600: '#B45309',
-          500: '#D97706',
-          400: '#F59E0B',
-          300: '#FBBF24',
-          100: '#FEF3C7',
-          50: '#FFFBEB'
+          800: '#8E2A33',
+          700: '#A8343D',
+          600: '#C94550',
+          500: '#E5646C',
+          400: '#F2878D',
+          300: '#F8B4B8',
+          100: '#FDE3E5',
+          50: '#FEF3F4'
         }
       },
       fontFamily: {
@@ -33,9 +39,9 @@ export default {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace']
       },
       boxShadow: {
-        'premium': '0 10px 30px -10px rgba(15, 33, 55, 0.15)',
-        'premium-lg': '0 20px 40px -15px rgba(15, 33, 55, 0.25)',
-        'gold-glow': '0 0 20px -3px rgba(245, 158, 11, 0.35)'
+        'premium': '0 10px 30px -10px rgba(74, 15, 22, 0.16)',
+        'premium-lg': '0 20px 40px -15px rgba(74, 15, 22, 0.28)',
+        'gold-glow': '0 0 20px -3px rgba(229, 100, 108, 0.40)'
       }
     },
   },

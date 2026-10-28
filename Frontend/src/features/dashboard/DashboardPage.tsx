@@ -119,6 +119,7 @@ export const DashboardPage: React.FC = () => {
       <div className="relative rounded-3xl bg-gradient-to-r from-navy-950 via-navy-900 to-navy-800 gradient-flow p-6 sm:p-8 text-white shadow-xl overflow-hidden border border-navy-800">
         <div className="aurora-orb absolute -top-16 right-0 w-96 h-96 bg-gold-400/15 rounded-full blur-3xl pointer-events-none" />
         <div className="aurora-orb-slow absolute -bottom-24 left-1/4 w-80 h-80 bg-navy-500/30 rounded-full blur-3xl pointer-events-none" />
+        <img src="/logo-mark-white.png" alt="" aria-hidden="true" draggable={false} className="pointer-events-none absolute -bottom-6 right-4 hidden h-44 w-auto select-none opacity-[0.07] sm:block" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">

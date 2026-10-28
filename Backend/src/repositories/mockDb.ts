@@ -356,7 +356,7 @@ export const mockDb: MockDatabase = {
       senderId: 't0000000-0000-0000-0000-000000000001',
       senderName: 'Prof. Imran Hanif',
       senderRole: 'teacher',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=0F2137&textColor=FBBF24',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=4A0F16&textColor=F8B4B8',
       body: 'Hello everyone! Welcome to the WEB302 classroom channel. Feel free to ask questions here.',
       createdAt: new Date(Date.now() - 3 * 86400000).toISOString()
     },
@@ -366,7 +366,7 @@ export const mockDb: MockDatabase = {
       senderId: 's0000000-0000-0000-0000-000000000001',
       senderName: 'Ayesha Siddiqui',
       senderRole: 'student',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Ayesha&backgroundColor=F59E0B&textColor=0A1628',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Ayesha&backgroundColor=FDE3E5&textColor=9B1C25',
       body: 'Thank you Professor! Could you clarify if TypeScript strict mode is required for Assignment 1?',
       createdAt: new Date(Date.now() - 2 * 86400000).toISOString()
     },
@@ -376,7 +376,7 @@ export const mockDb: MockDatabase = {
       senderId: 't0000000-0000-0000-0000-000000000001',
       senderName: 'Prof. Imran Hanif',
       senderRole: 'teacher',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=0F2137&textColor=FBBF24',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=4A0F16&textColor=F8B4B8',
       body: 'Yes, strict mode is required. No "any" types are permitted in core services.',
       createdAt: new Date(Date.now() - 1.9 * 86400000).toISOString()
     }
