@@ -65,3 +65,17 @@ export function calculateGradeLetter(percentage: number): { letter: string; colo
   if (percentage >= 60) return { letter: 'D', color: 'text-orange-600 bg-orange-50 border-orange-200' };
   return { letter: 'F', color: 'text-rose-600 bg-rose-50 border-rose-200' };
 }
+
+export type DueState = 'completed' | 'overdue' | 'due-soon' | 'upcoming';
+
+/** Timezone-aware due date label plus a consistent state used to colour assignments everywhere. */
+export function describeDue(dueAtString: string, completed = false): { state: DueState; label: string; className: string } {
+  const due = new Date(dueAtString);
+  const zone = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(due).find(part => part.type === 'timeZoneName')?.value ?? '';
+  const when = `${format(due, 'MMM dd, yyyy · hh:mm a')} ${zone}`.trim();
+  if (completed) return { state: 'completed', label: `Done · due ${when}`, className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+  const hoursLeft = (due.getTime() - Date.now()) / 3600000;
+  if (hoursLeft < 0) return { state: 'overdue', label: `Overdue ${formatDistanceToNow(due)} · ${when}`, className: 'text-rose-700 bg-rose-50 border-rose-200' };
+  if (hoursLeft <= 48) return { state: 'due-soon', label: `Due ${formatDistanceToNow(due, { addSuffix: true })} · ${when}`, className: 'text-amber-700 bg-amber-50 border-amber-200' };
+  return { state: 'upcoming', label: `Due ${when}`, className: 'text-slate-600 bg-slate-50 border-slate-200' };
+}

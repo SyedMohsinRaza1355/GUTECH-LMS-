@@ -7,7 +7,8 @@ import {
   listUsers,
   createUser,
   patchUser,
-  resetUserPassword
+  resetUserPassword,
+  listAuditTrail
 } from '../controllers/adminController.js';
 import {
   listAllCoursesAdmin,
@@ -44,6 +45,7 @@ router.get('/users', listUsers);
 router.post('/users', validateRequest({ body: createUserSchema }), createUser);
 router.patch('/users/:id', validateRequest({ body: patchUserSchema }), patchUser);
 router.post('/users/:id/reset-password', resetUserPassword);
+router.get('/audit', listAuditTrail);
 
 // Course Management
 router.get('/courses', listAllCoursesAdmin);

@@ -50,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 <span className="font-extrabold text-base tracking-tight text-navy-950">GUTech</span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-gold-400 text-navy-950 uppercase tracking-widest">LMS</span>
               </div>
-              <p className="hidden sm:block text-[10px] font-medium text-slate-400">German University of Technology</p>
+              <p className="hidden sm:block text-[10px] font-medium text-slate-400">Ghazali University of Technology</p>
             </div>
           </Link>
         </div>
@@ -87,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             {dropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 z-50 modal-pop">
                   <div className="px-4 py-2 border-b border-slate-100">
                     <p className="text-xs font-bold text-navy-900">{user?.fullName}</p>
                     <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>

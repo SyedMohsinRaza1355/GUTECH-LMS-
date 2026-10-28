@@ -79,7 +79,7 @@ const stableId = (n: number) => `d0000000-0000-4000-8000-${String(n).padStart(12
 
 function makeDemoPdf(title: string, body: string) {
   const safe = (value: string) => value.replace(/[^\x20-\x7E]/g, ' ').replace(/[\\()]/g, '\\$&');
-  const stream = `BT /F1 18 Tf 54 740 Td (${safe(title)}) Tj /F1 11 Tf 0 -32 Td (${safe(body)}) Tj 0 -24 Td (GUTech LMS Fall 2026 demo resource) Tj ET`;
+  const stream = `BT /F1 18 Tf 54 740 Td (${safe(title)}) Tj /F1 11 Tf 0 -32 Td (${safe(body)}) Tj 0 -24 Td (Ghazali University of Technology - Fall 2026 demo resource) Tj ET`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -137,7 +137,7 @@ async function ensureSemesterActivity() {
         const score = Math.max(5, Math.round(assignments[assignmentIndex].max_marks * (0.72 + ((studentIndex + assignmentIndex) % 7) * 0.04)));
         const submittedAt = ['2026-09-20T14:00:00Z', '2026-10-04T14:00:00Z', '2026-10-18T14:00:00Z'][assignmentIndex];
         const gradedAt = assignmentIndex < 2 ? new Date(Date.parse(submittedAt) + 86400000).toISOString() : null;
-        const globalIndex = base + 100 + assignmentIndex * students.length + studentIndex + 1;
+        const globalIndex = 100000 + index * 1000 + assignmentIndex * 100 + studentIndex + 1;
         return {
           id: stableId(globalIndex), assignment_id: assignments[assignmentIndex].id, student_id: studentId,
           text_answer: `Demo semester submission for ${student.fullName}. Work submitted through the student portal.`,
@@ -175,7 +175,7 @@ async function ensureSemesterActivity() {
       const correctCount = 1 + ((studentIndex + index) % 3);
       const answers: Record<string, string[]> = {};
       attemptedQuestions.forEach((question, questionIndex) => { answers[question.id] = [questionIndex < correctCount ? (question.position === 2 ? 'true' : 'a') : 'b']; });
-      return { id: stableId(base + 300 + studentIndex), quiz_id: quizRows[0].id, student_id: studentId, started_at: '2026-10-16T09:00:00Z', submitted_at: '2026-10-16T09:18:00Z', answers, score: correctCount * 5 };
+      return { id: stableId(200000 + index * 1000 + studentIndex), quiz_id: quizRows[0].id, student_id: studentId, started_at: '2026-10-16T09:00:00Z', submitted_at: '2026-10-16T09:18:00Z', answers, score: correctCount * 5 };
     });
     const { error: attemptError } = await supabaseAdmin.from('quiz_attempts').upsert(attemptRows, { onConflict: 'quiz_id,student_id' });
     if (attemptError) throw attemptError;
@@ -202,11 +202,25 @@ async function ensureSemesterActivity() {
   }
 }
 
+// Removes demo accounts from earlier roster versions (e.g. @gutech.edu.om). Opt-in: npm run db:seed-demo -- --prune-legacy
+async function pruneLegacyDemoUsers() {
+  const current = new Set(mockDb.profiles.map(profile => profile.email.toLowerCase()));
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) throw error;
+  const legacy = data.users.filter(user => (user.email || '').toLowerCase().endsWith('@gutech.edu.om') && !current.has((user.email || '').toLowerCase()));
+  for (const user of legacy) {
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+    if (deleteError) throw deleteError;
+  }
+  console.log(`Removed ${legacy.length} legacy demo accounts.`);
+}
+
 async function main() {
   await ensureDemoUsers();
   await ensureDemoCourses();
   await ensureSemesterActivity();
-  console.log(`Seeded ${profilesByEmail.size} Supabase Auth users and profiles, ${coursesByCode.size} courses, five enrollments per student, and semester assignments, submissions, quizzes, results, and resources.`);
+  if (process.argv.includes('--prune-legacy')) await pruneLegacyDemoUsers();
+  console.log(`Seeded ${profilesByEmail.size} Supabase Auth users and profiles, ${coursesByCode.size} courses, five course enrollments per student, and semester assignments, submissions, quizzes, results, and resources.`);
   console.log('Passwords remain in Supabase Auth only; no plaintext password column is created.');
 }
 

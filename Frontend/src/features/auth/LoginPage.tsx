@@ -1,11 +1,11 @@
 // ==============================================================================
-// GUTech Internal LMS - Login Page
+// Ghazali University of Technology (GUTech) LMS - Login Page
 // Non-negotiable Spec Rule: No sign-up page or link. Internal access only.
 // ==============================================================================
 
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
-import { demoAccounts } from '../../context/AuthContext.js';
+import { loginPanelAccounts } from '../../context/AuthContext.js';
 import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap,
@@ -61,23 +61,24 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-navy-950 via-navy-900 to-navy-850 flex items-center justify-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 gradient-flow flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="aurora-orb pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-gold-400/20 blur-3xl" aria-hidden="true" />
+      <div className="aurora-orb-slow pointer-events-none absolute -bottom-32 -right-16 h-[28rem] w-[28rem] rounded-full bg-navy-500/40 blur-3xl" aria-hidden="true" />
+      <div className="relative w-full max-w-md login-card">
         {/* GUTech Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-gold-500 to-gold-400 text-navy-950 shadow-gold-glow mb-4">
+          <div className="aurora-orb inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-gold-500 to-gold-300 text-navy-950 shadow-gold-glow mb-4">
             <GraduationCap className="w-9 h-9" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            GUTech <span className="text-gold-400">LMS Portal</span>
+            GUTech <span className="bg-gradient-to-r from-gold-300 to-gold-500 bg-clip-text text-transparent">LMS Portal</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1">
-            German University of Technology in Oman · Internal Academic Portal
-          </p>
+          <p className="text-sm font-semibold text-slate-100 mt-1">Ghazali University of Technology</p>
+          <p className="text-xs text-slate-400 mt-0.5">Internal Academic Portal</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/10 backdrop-blur-xl">
+        <div className="bg-white/95 rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/20 backdrop-blur-xl">
           {error && (
             <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -98,7 +99,7 @@ export const LoginPage: React.FC = () => {
                   type="text"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="e.g. fatima.student"
+                  placeholder="e.g. ayesha.siddiqui" autoComplete="username"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:border-navy-600 focus:ring-2 focus:ring-navy-100"
                   required
                 />
@@ -124,7 +125,7 @@ export const LoginPage: React.FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter your secret password"
+                  placeholder="Enter your password" autoComplete="current-password"
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:border-navy-600 focus:ring-2 focus:ring-navy-100"
                   required
                 />
@@ -153,15 +154,20 @@ export const LoginPage: React.FC = () => {
           {/* Demo account information */}
           <div className="mt-6 pt-6 border-t border-slate-100">
             <p className="text-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">Demo accounts available</p>
-            <p className="mt-2 text-center text-xs text-slate-600">Admin · Teacher · Student</p>
-            <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50">
-              <summary className="cursor-pointer px-3 py-2 text-center text-xs font-semibold text-navy-800">Show sample usernames and passwords</summary>
-              <div className="max-h-44 overflow-y-auto border-t border-slate-200 divide-y divide-slate-200">
-                {demoAccounts.map(({ profile, password }) => (
-                  <div key={profile.email} className="flex items-center justify-between gap-3 px-3 py-2 text-[11px]">
+            <p className="mt-2 text-center text-xs text-slate-600">1 admin · {loginPanelAccounts.filter(a => a.profile.role === 'teacher').length} teachers · {loginPanelAccounts.filter(a => a.profile.role === 'student').length} students</p>
+            <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50" open>
+              <summary className="cursor-pointer px-3 py-2 text-center text-xs font-semibold text-navy-800">Sample usernames and passwords (tap to fill)</summary>
+              <div className="max-h-52 overflow-y-auto border-t border-slate-200 divide-y divide-slate-200">
+                {loginPanelAccounts.map(({ profile, password: demoPassword }) => (
+                  <button
+                    type="button"
+                    key={profile.email}
+                    onClick={() => { setEmail(profile.email.split('@')[0]); setPassword(demoPassword); setError(null); }}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] transition-colors hover:bg-gold-50 focus-visible:bg-gold-50"
+                  >
                     <span className="min-w-0 truncate text-slate-700"><span className="font-semibold capitalize">{profile.role}</span> · {profile.email.split('@')[0]}</span>
-                    <code className="shrink-0 text-slate-500">{password}</code>
-                  </div>
+                    <code className="shrink-0 text-slate-500">{demoPassword}</code>
+                  </button>
                 ))}
               </div>
             </details>
@@ -178,7 +184,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer info */}
         <p className="text-center text-xs text-slate-400 mt-6">
-          © 2026 German University of Technology. All rights reserved.
+          © 2026 Ghazali University of Technology. All rights reserved.
         </p>
       </div>
 
@@ -201,7 +207,7 @@ export const LoginPage: React.FC = () => {
               type="email"
               value={forgotEmail}
               onChange={e => setForgotEmail(e.target.value)}
-              placeholder="name@gutech.edu.om"
+              placeholder="name@gutech.edu.pk"
               required
             />
             <Button type="submit" variant="primary" className="w-full">

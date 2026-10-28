@@ -5,6 +5,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.js';
+import { ToastProvider } from './components/ui/Toast.js';
 import { AppLayout } from './components/layout/AppLayout.js';
 import { LoginPage } from './features/auth/LoginPage.js';
 import { ProfilePage } from './features/profile/ProfilePage.js';
@@ -45,6 +46,7 @@ const RoleRoute: React.FC<{ children: React.ReactNode; roles: Array<'admin' | 't
 export const App: React.FC = () => {
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           {/* Public Login Route (No Sign-up Route per Spec Rule 6) */}
@@ -103,6 +105,7 @@ export const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 };

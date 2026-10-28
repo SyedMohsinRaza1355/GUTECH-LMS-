@@ -44,8 +44,12 @@ export const createUserSchema = z.object({
   fullName: z.string().min(2, 'Full name must have at least 2 characters'),
   email: z.string().email('Invalid email address'),
   role: z.enum(['admin', 'teacher', 'student']),
-  rollNo: z.string().optional().nullable(),
-  tempPassword: z.string().min(8, 'Temporary password must be at least 8 characters')
+  rollNo: z.string().trim().optional().nullable(),
+  courseIds: z.array(z.string().uuid()).max(20).optional(),
+  tempPassword: z.string()
+    .min(8, 'Temporary password must be at least 8 characters')
+    .regex(/[A-Za-z]/, 'Temporary password must contain a letter')
+    .regex(/[0-9]/, 'Temporary password must contain a number')
 });
 
 export const patchUserSchema = z.object({
@@ -113,7 +117,7 @@ export const submitAssignmentSchema = z.object({
 });
 
 export const gradeSubmissionSchema = z.object({
-  marks: z.coerce.number().min(0, 'Marks must be 0 or higher'),
+  marks: z.coerce.number({ invalid_type_error: 'Marks must be a number' }).finite().min(0, 'Marks must be 0 or higher'),
   feedback: z.string().optional().nullable()
 });
 

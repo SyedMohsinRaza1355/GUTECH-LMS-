@@ -102,8 +102,8 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = 'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]';
 
   const variants = {
-    primary: 'bg-navy-800 hover:bg-navy-900 text-white shadow-sm focus:ring-navy-700',
-    gold: 'bg-gold-500 hover:bg-gold-600 text-navy-950 font-semibold shadow-gold-glow focus:ring-gold-400',
+    primary: 'btn-shine bg-gradient-to-r from-navy-800 to-navy-700 hover:from-navy-900 hover:to-navy-800 text-white shadow-sm hover:shadow-premium focus:ring-navy-700',
+    gold: 'btn-shine bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-500 hover:to-gold-600 text-navy-950 font-semibold shadow-gold-glow focus:ring-gold-400',
     secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-800 focus:ring-slate-400',
     outline: 'border border-slate-300 hover:bg-slate-50 text-slate-700 focus:ring-navy-600',
     ghost: 'hover:bg-slate-100 text-slate-600 hover:text-slate-900 focus:ring-slate-300',
@@ -140,7 +140,7 @@ export const Card: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className
   return (
     <div
       className={cn(
-        'bg-white rounded-2xl border border-slate-200/80 shadow-premium p-5 transition-all duration-200',
+        'card-lift bg-white rounded-2xl border border-slate-200/80 shadow-premium p-5',
         className
       )}
       {...props}
@@ -172,6 +172,13 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   maxWidth = 'md'
 }) => {
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const widthClasses = {
@@ -183,17 +190,17 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-navy-950/60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-navy-950/60 backdrop-blur-sm backdrop-fade"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
       <div
         className={cn(
-          'relative w-full bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150',
+          'relative w-full bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-10 modal-pop',
           widthClasses[maxWidth]
         )}
       >
@@ -204,6 +211,7 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -239,7 +247,8 @@ export const Input: React.FC<InputProps> = ({
   id,
   ...props
 }) => {
-  const inputId = id || props.name || Math.random().toString();
+  const generatedId = React.useId();
+  const inputId = id || props.name || generatedId;
   return (
     <div className="w-full">
       {label && (
@@ -274,7 +283,8 @@ export const Textarea: React.FC<TextareaProps> = ({
   id,
   ...props
 }) => {
-  const inputId = id || props.name || Math.random().toString();
+  const generatedId = React.useId();
+  const inputId = id || props.name || generatedId;
   return (
     <div className="w-full">
       {label && (

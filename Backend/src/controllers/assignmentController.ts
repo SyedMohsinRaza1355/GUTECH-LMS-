@@ -7,6 +7,7 @@ import { mockDb } from '../repositories/mockDb.js';
 import { notFound, forbidden, conflict, unprocessable } from '../utils/errors.js';
 import { Assignment, Submission } from '../types/index.js';
 import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
+import { recordAudit } from '../utils/audit.js';
 
 export const listAssignments = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -348,6 +349,7 @@ export const gradeSubmission = async (req: Request, res: Response, next: NextFun
       if (marks > Number(assignment.max_marks)) return next(unprocessable(`Marks awarded (${marks}) cannot exceed maximum allowable marks (${assignment.max_marks})`));
       const { data, error: gradeError } = await supabaseAdmin.from('submissions').update({ marks_obtained: marks, feedback: feedback || null, graded_by: user.id, graded_at: new Date().toISOString() }).eq('id', id).select().single();
       if (gradeError) throw gradeError;
+      await recordAudit({ actorId: user.id, action: 'grade.save', entity: 'submission', entityId: id, live: true, metadata: { assignment: assignment.title, studentId: submission.student_id, previousMarks: submission.marks_obtained, marks, maxMarks: Number(assignment.max_marks) } });
       return res.status(200).json({ data: { id: data.id, assignmentId: data.assignment_id, studentId: data.student_id, textAnswer: data.text_answer, filePath: data.file_path, submittedAt: data.submitted_at, isLate: data.is_late, marksObtained: Number(data.marks_obtained), feedback: data.feedback, gradedBy: data.graded_by, gradedAt: data.graded_at } });
     }
 
@@ -368,6 +370,7 @@ export const gradeSubmission = async (req: Request, res: Response, next: NextFun
       return next(unprocessable(`Marks awarded (${marks}) cannot exceed maximum allowable marks (${assignment.maxMarks})`));
     }
 
+    await recordAudit({ actorId: user.id, action: 'grade.save', entity: 'submission', entityId: id, live: false, metadata: { assignment: assignment.title, studentId: submission.studentId, previousMarks: submission.marksObtained, marks, maxMarks: assignment.maxMarks } });
     submission.marksObtained = marks;
     submission.feedback = feedback || null;
     submission.gradedBy = user.id;

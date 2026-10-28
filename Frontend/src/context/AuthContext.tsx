@@ -1,7 +1,8 @@
-// GUTech LMS authentication and per-profile demo sessions.
+// Ghazali University of Technology LMS authentication and per-profile demo sessions.
 import React, { createContext, useContext, useState } from 'react';
 import { UserProfile } from '../types/index.js';
 import { api } from '../lib/api.js';
+import { demoRoster, loginPanelUsernames, EMAIL_DOMAIN } from '../lib/demoRoster.js';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -13,21 +14,22 @@ interface AuthContextType {
   updateUserProfile: (data: Partial<UserProfile>) => void;
 }
 
-export const demoAccounts: Array<{ profile: UserProfile; password: string }> = [
-  { profile: { id: 'a0000000-0000-0000-0000-000000000001', fullName: 'Dr. Farooq Al-Balushi', email: 'farooq.admin@gutech.edu.om', role: 'admin', isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password: 'Admin@123' },
-  { profile: { id: 'a0000000-0000-0000-0000-000000000002', fullName: 'Ms. Hana Al-Rawahi', email: 'hana.admin@gutech.edu.om', role: 'admin', isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password: 'Admin@456' },
-  { profile: { id: 't0000000-0000-0000-0000-000000000001', fullName: 'Prof. Tariq Al-Hinai', email: 'tariq.teacher@gutech.edu.om', role: 'teacher', isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password: 'Teach@123' },
-  { profile: { id: 't0000000-0000-0000-0000-000000000002', fullName: 'Dr. Sarah Mitchell', email: 'sarah.teacher@gutech.edu.om', role: 'teacher', isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password: 'Teach@456' },
-  { profile: { id: 't0000000-0000-0000-0000-000000000003', fullName: 'Dr. Khalid Al-Amri', email: 'khalid.teacher@gutech.edu.om', role: 'teacher', isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password: 'Teach@789' },
-  ...[
-    ['Fatima Al-Zadjali', 'fatima.student', '0101', 'Student@101'], ['Ali Al-Lawati', 'ali.student', '0102', 'Student@102'],
-    ['Maryam Al-Kiyumi', 'maryam.student', '0103', 'Student@103'], ['Hamad Al-Busaidi', 'hamad.student', '0104', 'Student@104'],
-    ['Noor Al-Rashdi', 'noor.student', '0105', 'Student@105'], ['Omar Al-Siyabi', 'omar.student', '0106', 'Student@106'],
-    ['Layla Al-Harthi', 'layla.student', '0107', 'Student@107']
-  ].map(([fullName, username, roll, password], index) => ({
-    profile: { id: `s0000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`, fullName, email: `${username}@gutech.edu.om`, role: 'student' as const, rollNo: `GUT-2023-${roll}`, isActive: true, mustChangePassword: false, createdAt: '2026-09-01T08:00:00Z', updatedAt: '2026-09-01T08:00:00Z' }, password
-  }))
-];
+const demoTimestamp = '2026-09-01T08:00:00Z';
+
+/** Offline-demo fallback accounts: the full 55-person roster (see lib/demoRoster.ts). */
+export const demoAccounts: Array<{ profile: UserProfile; password: string }> = demoRoster.map(person => ({
+  profile: {
+    id: person.id, fullName: person.fullName, email: `${person.username}@${EMAIL_DOMAIN}`, role: person.role,
+    ...(person.rollNo ? { rollNo: person.rollNo } : {}), isActive: true, mustChangePassword: false,
+    createdAt: demoTimestamp, updatedAt: demoTimestamp
+  },
+  password: person.password
+}));
+
+/** The short list shown on the sign-in page: 1 admin, all teachers, 5 students. */
+export const loginPanelAccounts = loginPanelUsernames
+  .map(username => demoAccounts.find(account => account.profile.email === `${username}@${EMAIL_DOMAIN}`))
+  .filter((account): account is { profile: UserProfile; password: string } => Boolean(account));
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -48,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string) => {
     setIsLoading(true);
     const normalized = username.trim().toLowerCase();
-    const email = normalized.includes('@') ? normalized : `${normalized}@gutech.edu.om`;
+    const email = normalized.includes('@') ? normalized : `${normalized}@${EMAIL_DOMAIN}`;
     try {
       try {
         const response = await api.login(email, password);

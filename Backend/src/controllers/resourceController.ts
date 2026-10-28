@@ -196,7 +196,7 @@ export const getResourceDownloadUrl = async (req: Request, res: Response, next: 
     }
 
     // Return signed URL with 60 second expiry
-    const signedUrl = `https://storage.gutech.edu.om/download/${encodeURIComponent(resource.filePath)}?token=signed-${Date.now()}&expires=60`;
+    const signedUrl = `https://storage.gutech.edu.pk/download/${encodeURIComponent(resource.filePath)}?token=signed-${Date.now()}&expires=60`;
 
     return res.status(200).json({
       data: {

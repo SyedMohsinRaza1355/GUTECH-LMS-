@@ -200,7 +200,7 @@ export const ProfilePage: React.FC = () => {
               )}
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Campus Location</label>
-                <p className="text-sm font-semibold text-slate-800 mt-0.5">Halban Campus, Muscat, Oman</p>
+                <p className="text-sm font-semibold text-slate-800 mt-0.5">Main Campus</p>
               </div>
             </div>
           ) : (

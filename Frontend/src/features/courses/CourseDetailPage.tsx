@@ -37,9 +37,11 @@ import {
   ChatMessage
 } from '../../types/index.js';
 import { api } from '../../lib/api.js';
+import { useToast, errorMessage } from '../../components/ui/Toast.js';
 import {
   formatDate,
   formatDateTime,
+  describeDue,
   formatRelativeTime,
   formatBytes,
   getFileExtension,
@@ -52,6 +54,7 @@ export const CourseDetailPage: React.FC = () => {
   const { id: courseId } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const { user, role } = useAuth();
+  const toast = useToast();
 
   const requestedTab = searchParams.get('tab');
   const selectedAssignmentId = searchParams.get('assignmentId');
@@ -86,7 +89,9 @@ export const CourseDetailPage: React.FC = () => {
   const [loadingGradingAssignmentId, setLoadingGradingAssignmentId] = useState<string | null>(null);
   const [gradingError, setGradingError] = useState('');
   const [selectedSubForGrading, setSelectedSubForGrading] = useState<any | null>(null);
-  const [gradingMarksInput, setGradingMarksInput] = useState<number>(0);
+  const [gradingMarksInput, setGradingMarksInput] = useState<string>('');
+  const [gradingFieldError, setGradingFieldError] = useState('');
+  const [savingGrade, setSavingGrade] = useState(false);
   const [gradingFeedbackInput, setGradingFeedbackInput] = useState<string>('');
 
   // Quizzes state
@@ -218,8 +223,14 @@ export const CourseDetailPage: React.FC = () => {
   };
 
   const handleDeleteResource = async (resId: string) => {
-    await api.deleteResource(resId);
-    setResources(resources.filter(r => r.id !== resId));
+    if (!window.confirm('Delete this resource? Students will lose access immediately.')) return;
+    try {
+      await api.deleteResource(resId);
+      setResources(resources.filter(r => r.id !== resId));
+      toast.success('Resource deleted');
+    } catch (error) {
+      toast.error('Could not delete the resource', errorMessage(error));
+    }
   };
 
   // Handlers for Assignments
@@ -227,29 +238,47 @@ export const CourseDetailPage: React.FC = () => {
     e.preventDefault();
     if (!courseId) return;
 
-    const newAssign = await api.createAssignment(courseId, {
-      title: assignTitle,
-      instructions: assignInst,
-      maxMarks: Number(assignMarks),
-      dueAt: assignDueDate || new Date(Date.now() + 7 * 86400000).toISOString(),
-      allowLate: assignAllowLate
-    });
-
-    setAssignments([newAssign, ...assignments]);
-    setAssignModalOpen(false);
-    setAssignTitle('');
-    setAssignInst('');
+    if (!(Number(assignMarks) > 0)) {
+      toast.error('Maximum marks must be greater than zero');
+      return;
+    }
+    try {
+      const newAssign = await api.createAssignment(courseId, {
+        title: assignTitle,
+        instructions: assignInst,
+        maxMarks: Number(assignMarks),
+        dueAt: assignDueDate ? new Date(assignDueDate).toISOString() : new Date(Date.now() + 7 * 86400000).toISOString(),
+        allowLate: assignAllowLate
+      });
+      setAssignments([newAssign, ...assignments]);
+      setAssignModalOpen(false);
+      setAssignTitle('');
+      setAssignInst('');
+      toast.success('Assignment published', newAssign.title + ' is now visible to enrolled students.');
+    } catch (error) {
+      // Keep the form open with the teacher's input intact so nothing has to be retyped.
+      toast.error('Assignment was not saved', errorMessage(error));
+    }
   };
 
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!submittingAssignment) return;
 
-    const sub = await api.submitAssignment(submittingAssignment.id, studentTextAnswer, 'submissions/student_work.pdf');
-    setAssignments(assignments.map(a => a.id === submittingAssignment.id ? { ...a, mySubmission: sub } : a));
-    setSubmitModalOpen(false);
-    setStudentTextAnswer('');
-    setSubmittingAssignment(null);
+    if (!studentTextAnswer.trim()) {
+      toast.error('Write your answer before submitting');
+      return;
+    }
+    try {
+      const sub = await api.submitAssignment(submittingAssignment.id, studentTextAnswer.trim(), 'submissions/student_work.pdf');
+      setAssignments(assignments.map(a => a.id === submittingAssignment.id ? { ...a, mySubmission: sub } : a));
+      setSubmitModalOpen(false);
+      setStudentTextAnswer('');
+      setSubmittingAssignment(null);
+      toast.success('Submission received', sub.isLate ? 'It was marked late.' : 'Your teacher can now review it.');
+    } catch (error) {
+      toast.error('Submission failed', errorMessage(error) + ' Your answer is still in the form.');
+    }
   };
 
   const handleOpenGradingDesk = async (assign: Assignment) => {
@@ -269,9 +298,26 @@ export const CourseDetailPage: React.FC = () => {
   };
 
   const handleSaveGrade = async (subId: string) => {
-    const updated = await api.gradeSubmission(subId, gradingMarksInput, gradingFeedbackInput);
-    setGradingSubmissions(gradingSubmissions.map(s => s.submission?.id === subId ? { ...s, submission: updated } : s));
-    setSelectedSubForGrading(null);
+    const max = activeAssignmentForGrading?.maxMarks ?? 0;
+    const marks = Number(gradingMarksInput);
+    if (gradingMarksInput.trim() === '' || Number.isNaN(marks) || marks < 0 || marks > max) {
+      setGradingFieldError('Enter marks between 0 and ' + max + '.');
+      return;
+    }
+    setGradingFieldError('');
+    setSavingGrade(true);
+    try {
+      const updated = await api.gradeSubmission(subId, marks, gradingFeedbackInput.trim());
+      setGradingSubmissions(current => current.map(s => s.submission?.id === subId ? { ...s, submission: updated } : s));
+      setSelectedSubForGrading(null);
+      toast.success('Grade saved', marks + ' / ' + max + ' recorded and visible to the student.');
+    } catch (error) {
+      // Leave the marks and feedback in place so the teacher can retry.
+      setGradingFieldError(errorMessage(error));
+      toast.error('Grade was not saved', errorMessage(error));
+    } finally {
+      setSavingGrade(false);
+    }
   };
 
   // Handlers for Quizzes
@@ -401,7 +447,7 @@ export const CourseDetailPage: React.FC = () => {
                   className="w-10 h-10 rounded-xl object-cover ring-2 ring-slate-200"
                 />
                 <div>
-                  <p className="text-xs font-bold text-navy-900">Prof. Tariq Al-Hinai</p>
+                  <p className="text-xs font-bold text-navy-900">Prof. Imran Hanif</p>
                   <p className="text-[11px] text-slate-500">Department of Computer Science</p>
                 </div>
               </div>
@@ -562,9 +608,9 @@ export const CourseDetailPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between pt-3 text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1.5 text-amber-700 font-medium">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-semibold ${describeDue(a.dueAt, Boolean(sub)).className}`}>
                       <Clock className="w-3.5 h-3.5" />
-                      Due: {formatDateTime(a.dueAt)}
+                      {describeDue(a.dueAt, Boolean(sub)).label}
                     </span>
                     <span className="font-bold text-navy-900">Total Marks: {a.maxMarks}</span>
                   </div>
@@ -752,7 +798,7 @@ export const CourseDetailPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 <tr className="hover:bg-slate-50/60">
-                  <td className="p-3 font-semibold text-navy-900">Fatima Al-Zadjali</td>
+                  <td className="p-3 font-semibold text-navy-900">Ayesha Siddiqui</td>
                   <td className="p-3 font-mono text-slate-500">GUT-2023-0142</td>
                   <td className="p-3 font-bold text-emerald-600">95.00</td>
                   <td className="p-3 font-bold text-emerald-600">20.00</td>
@@ -760,7 +806,7 @@ export const CourseDetailPage: React.FC = () => {
                   <td className="p-3 font-extrabold text-emerald-600">95.83%</td>
                 </tr>
                 <tr className="hover:bg-slate-50/60">
-                  <td className="p-3 font-semibold text-navy-900">Fatima Al-Zadjali</td>
+                  <td className="p-3 font-semibold text-navy-900">Ayesha Siddiqui</td>
                   <td className="p-3 font-mono text-slate-500">GUT-2023-0189</td>
                   <td className="p-3 font-bold text-emerald-600">88.00</td>
                   <td className="p-3 text-slate-400">Pending</td>
@@ -795,10 +841,10 @@ export const CourseDetailPage: React.FC = () => {
 
           <div className="space-y-2">
             {[
-              { id: '1', name: 'Fatima Al-Zadjali', email: 'fatima.student@gutech.edu.om', roll: 'GUT-2023-0101' },
-              { id: '2', name: 'Fatima Al-Zadjali', email: 'fatima.zadjali@gutech.edu.om', roll: 'GUT-2023-0189' },
-              { id: '3', name: 'Ali Al-Lawati', email: 'ali.lawati@gutech.edu.om', roll: 'GUT-2023-0205' },
-              { id: '4', name: 'Maryam Al-Kiyumi', email: 'maryam.kiyumi@gutech.edu.om', roll: 'GUT-2023-0311' }
+              { id: '1', name: 'Ayesha Siddiqui', email: 'ayesha.siddiqui@gutech.edu.pk', roll: 'GUT-2023-0101' },
+              { id: '2', name: 'Ayesha Siddiqui', email: 'ayesha.s2@gutech.edu.pk', roll: 'GUT-2023-0189' },
+              { id: '3', name: 'Usman Ghani', email: 'usman.ghani@gutech.edu.pk', roll: 'GUT-2023-0205' },
+              { id: '4', name: 'Hira Malik', email: 'hira.malik@gutech.edu.pk', roll: 'GUT-2023-0311' }
             ].map(st => (
               <div key={st.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
                 <div>
@@ -949,18 +995,19 @@ export const CourseDetailPage: React.FC = () => {
 
                 <div className="flex items-center gap-2">
                   {st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? (
-                    <span className="text-xs font-bold text-emerald-600">{st.submission.marksObtained} pts</span>
-                  ) : null}
+                    <span className="text-xs font-bold text-emerald-600">{st.submission.marksObtained} / {activeAssignmentForGrading?.maxMarks} pts</span>
+                  ) : <span className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Needs grading</span>}
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => {
                       setSelectedSubForGrading(st.submission);
-                      setGradingMarksInput(st.submission?.marksObtained || 90);
-                      setGradingFeedbackInput(st.submission?.feedback || 'Good work!');
+                      setGradingFieldError('');
+                      setGradingMarksInput(st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? String(st.submission.marksObtained) : '');
+                      setGradingFeedbackInput(st.submission?.feedback || '');
                     }}
                   >
-                    Grade
+                    {st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? 'Edit grade' : 'Grade'}
                   </Button>
                 </div>
               </div>
@@ -971,18 +1018,29 @@ export const CourseDetailPage: React.FC = () => {
           {selectedSubForGrading && (
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 mt-4">
               <h4 className="text-xs font-bold text-navy-900 uppercase">Award Marks</h4>
+              {selectedSubForGrading.textAnswer && (
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Student answer</p>
+                  <p className="whitespace-pre-wrap">{selectedSubForGrading.textAnswer}</p>
+                  {selectedSubForGrading.isLate && <p className="mt-2 font-semibold text-amber-700">Submitted late</p>}
+                </div>
+              )}
               <Input
                 label={`Marks (0 - ${activeAssignmentForGrading?.maxMarks})`}
                 type="number"
+                min={0}
+                max={activeAssignmentForGrading?.maxMarks}
+                step="0.5"
                 value={gradingMarksInput}
-                onChange={e => setGradingMarksInput(Number(e.target.value))}
+                error={gradingFieldError || undefined}
+                onChange={e => { setGradingMarksInput(e.target.value); setGradingFieldError(''); }}
               />
               <Input
                 label="Instructor Feedback"
                 value={gradingFeedbackInput}
                 onChange={e => setGradingFeedbackInput(e.target.value)}
               />
-              <Button size="sm" variant="gold" onClick={() => handleSaveGrade(selectedSubForGrading.id)}>
+              <Button size="sm" variant="gold" isLoading={savingGrade} onClick={() => handleSaveGrade(selectedSubForGrading.id)}>
                 Save Grade & Feedback
               </Button>
             </div>
@@ -1001,7 +1059,7 @@ export const CourseDetailPage: React.FC = () => {
           <textarea
             value={csvInput}
             onChange={e => setCsvInput(e.target.value)}
-            placeholder="fatima.student@gutech.edu.om&#10;ali.student@gutech.edu.om&#10;maryam.student@gutech.edu.om"
+            placeholder="ayesha.siddiqui@gutech.edu.pk&#10;usman.ghani@gutech.edu.pk&#10;hira.malik@gutech.edu.pk"
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs min-h-[120px] font-mono focus:outline-none focus:border-navy-600"
             required
           />

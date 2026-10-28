@@ -9,6 +9,7 @@
     "dev": "tsx watch src/index.ts",
     "db:migrate": "node scripts/apply-migrations.mjs",
     "db:seed-demo": "tsx scripts/seed-demo-users.ts",
+    "export:credentials": "tsx scripts/export-credentials.ts",
     "lint": "eslint src --ext .ts",
     "test": "vitest run"
   },

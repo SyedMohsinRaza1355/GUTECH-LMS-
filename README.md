@@ -1,6 +1,6 @@
 # GUTECH Student and Faculty Portal
 
-A role-based LMS prototype for German University of Technology in Oman. It uses React, TypeScript, Vite, Node.js, Express, and Supabase Auth/Postgres.
+A role-based LMS prototype for Ghazali University of Technology (GUTech). It uses React, TypeScript, Vite, Node.js, Express, and Supabase Auth/Postgres.
 
 ## What it includes
 
@@ -82,13 +82,13 @@ If port 4000 is already in use, the API is likely still running in another termi
 
 ## Roles and sample accounts
 
-There are 2 admins, 3 teachers, and 7 students. The login accepts either a username or full email. For username/password pairs, open the local `Demo Login Credentials.csv` or the login page's **Sample accounts** section. Primary demo accounts:
+There are 2 admins, 3 teachers, and 50 students with Pakistani names. The sign-in page lists 1 admin, all teachers and 5 students; run `npm run export:credentials` in `Backend` to regenerate the full 55-account CSV. The login accepts either a username or full email. For username/password pairs, open the local `Demo Login Credentials.csv` or the login page's **Sample accounts** section. Primary demo accounts:
 
 | Role | Username | Demo password | Walkthrough focus |
 | --- | --- | --- | --- |
-| Admin | `farooq.admin` | `Admin@123` | User directory, provisioning, course and enrollment management |
-| Teacher | `tariq.teacher` | `Teach@123` | Assigned classes and faculty view |
-| Student | `fatima.student` | `Student@101` | Student dashboard, course access, marks and student navigation |
+| Admin | `nadeem.admin` | `Admin@123` | User directory, provisioning, course and enrollment management |
+| Teacher | `imran.teacher` | `Teach@123` | Assigned classes and faculty view |
+| Student | `ayesha.siddiqui` | `Student@101` | Student dashboard, course access, marks and student navigation |
 
 Other sample accounts are listed locally. This is a demo-only credential list; do not use it for real accounts.
 

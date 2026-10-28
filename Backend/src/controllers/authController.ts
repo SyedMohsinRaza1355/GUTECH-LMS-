@@ -11,7 +11,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = req.body;
     const loginName = email.trim().toLowerCase();
-    const cleanEmail = loginName.includes('@') ? loginName : `${loginName}@gutech.edu.om`;
+    const cleanEmail = loginName.includes('@') ? loginName : `${loginName}@gutech.edu.pk`;
 
     // Check if live Supabase is active
     if (isSupabaseConfigured()) {

@@ -54,7 +54,7 @@ export const ComplaintsPage: React.FC = () => {
         {
           id: 'comp-1',
           raisedBy: user?.id || 's1',
-          raisedByName: 'Fatima Al-Zadjali',
+          raisedByName: 'Ayesha Siddiqui',
           courseId: 'c1',
           courseTitle: 'WEB302: Modern Web Technologies',
           category: 'academic',
@@ -68,7 +68,7 @@ export const ComplaintsPage: React.FC = () => {
         {
           id: 'comp-2',
           raisedBy: user?.id || 's1',
-          raisedByName: 'Fatima Al-Zadjali',
+          raisedByName: 'Ayesha Siddiqui',
           courseId: null,
           category: 'technical',
           subject: 'Laboratory projector flickering in Building C',

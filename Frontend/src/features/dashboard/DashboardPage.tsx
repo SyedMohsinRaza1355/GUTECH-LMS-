@@ -95,10 +95,11 @@ export const DashboardPage: React.FC = () => {
   }, [role, user?.id]);
 
   return (
-    <div className="space-y-6 page-enter" aria-busy={loading}>
+    <div className="space-y-6 stagger" aria-busy={loading}>
       {/* Welcome Hero Banner */}
-      <div className="relative rounded-3xl bg-gradient-to-r from-navy-950 via-navy-900 to-navy-800 p-6 sm:p-8 text-white shadow-xl overflow-hidden border border-navy-800">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gold-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative rounded-3xl bg-gradient-to-r from-navy-950 via-navy-900 to-navy-800 gradient-flow p-6 sm:p-8 text-white shadow-xl overflow-hidden border border-navy-800">
+        <div className="aurora-orb absolute -top-16 right-0 w-96 h-96 bg-gold-400/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="aurora-orb-slow absolute -bottom-24 left-1/4 w-80 h-80 bg-navy-500/30 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -111,7 +112,7 @@ export const DashboardPage: React.FC = () => {
               Welcome back, <span className="text-gold-400">{user?.fullName}</span>
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
-              German University of Technology internal learning and course management environment.
+              Ghazali University of Technology internal learning and course management environment.
             </p>
           </div>
 

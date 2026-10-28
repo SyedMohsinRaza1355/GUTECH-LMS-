@@ -30,7 +30,7 @@ describe('GUTech LMS Security & Authorization Tests', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'fatima.student@gutech.edu.om',
+        email: 'ayesha.siddiqui@gutech.edu.pk',
         password: 'Student@101'
       });
     expect(res.status).toBe(200);
@@ -42,7 +42,7 @@ describe('GUTech LMS Security & Authorization Tests', () => {
     const res = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'nonexistent.user@gutech.edu.om',
+        email: 'nonexistent.user@gutech.edu.pk',
         password: 'wrongpassword'
       });
     expect(res.status).toBe(401);
@@ -77,5 +77,86 @@ describe('GUTech LMS Security & Authorization Tests', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.items).toBeDefined();
     expect(res.body.data.summary).toBeDefined();
+  });
+});
+
+const ADMIN = 'Bearer demo-token-a0000000-0000-0000-0000-000000000001';
+const TEACHER_WEB = 'Bearer demo-token-t0000000-0000-0000-0000-000000000001';
+const TEACHER_OTHER = 'Bearer demo-token-t0000000-0000-0000-0000-000000000003';
+const STUDENT = 'Bearer demo-token-s0000000-0000-0000-0000-000000000001';
+const SUBMISSION = 'sub00000-0000-0000-0000-000000000002';
+
+describe('Roster', () => {
+  it('has 2 admins, 3 teachers and 50 students with unique logins and no Arabic-style names', async () => {
+    const res = await request(app).get('/api/admin/users?pageSize=500').set('Authorization', ADMIN);
+    const users = res.body.data as Array<{ role: string; email: string; fullName: string }>;
+    expect(users.filter(u => u.role === 'student')).toHaveLength(50);
+    expect(users.filter(u => u.role === 'teacher')).toHaveLength(3);
+    expect(users.filter(u => u.role === 'admin')).toHaveLength(2);
+    expect(new Set(users.map(u => u.email)).size).toBe(users.length);
+    expect(users.some(u => /\bAl-/.test(u.fullName))).toBe(false);
+  });
+});
+
+describe('Grading', () => {
+  it('lets the course teacher grade a submission and records an audit entry', async () => {
+    const res = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', TEACHER_WEB).send({ marks: 91, feedback: 'Well done' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.marksObtained).toBe(91);
+    const audit = await request(app).get('/api/admin/audit').set('Authorization', ADMIN);
+    expect(audit.body.data.some((row: { action: string }) => row.action === 'grade.save')).toBe(true);
+  });
+
+  it('rejects marks above the assignment maximum', async () => {
+    const res = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', TEACHER_WEB).send({ marks: 101 });
+    expect(res.status).toBe(422);
+  });
+
+  it('rejects negative and non-numeric marks', async () => {
+    const negative = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', TEACHER_WEB).send({ marks: -1 });
+    const text = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', TEACHER_WEB).send({ marks: 'abc' });
+    expect(negative.status).toBeGreaterThanOrEqual(400);
+    expect(text.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('forbids students and teachers of other courses from grading', async () => {
+    const asStudent = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', STUDENT).send({ marks: 100 });
+    const asOtherTeacher = await request(app).patch(`/api/submissions/${SUBMISSION}/grade`).set('Authorization', TEACHER_OTHER).send({ marks: 100 });
+    expect(asStudent.status).toBe(403);
+    expect(asOtherTeacher.status).toBe(403);
+  });
+});
+
+describe('Admin provisioning', () => {
+  it('creates a student with an automatic roll number and enrols them in the chosen courses', async () => {
+    const courseId = 'c0000000-0000-0000-0000-000000000001';
+    const res = await request(app).post('/api/admin/users').set('Authorization', ADMIN).send({
+      fullName: 'Test Student', email: 'test.student@gutech.edu.pk', role: 'student', tempPassword: 'Welcome@2026', courseIds: [courseId]
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.rollNo).toMatch(/^GUT-\d{4}-\d{4}$/);
+    expect(res.body.data.enrolledCourseCount).toBe(1);
+
+    const login = await request(app).post('/api/auth/login').send({ email: 'test.student', password: 'Welcome@2026' });
+    expect(login.status).toBe(200);
+    expect(login.body.data.profile.role).toBe('student');
+
+    const courses = await request(app).get('/api/me/courses').set('Authorization', `Bearer demo-token-${res.body.data.id}`);
+    expect(courses.status).toBe(200);
+    expect(courses.body.data.map((c: { id: string }) => c.id)).toContain(courseId);
+  });
+
+  it('rejects duplicate emails and weak passwords, and non-admin callers', async () => {
+    const duplicate = await request(app).post('/api/admin/users').set('Authorization', ADMIN).send({ fullName: 'Dup', email: 'ayesha.siddiqui@gutech.edu.pk', role: 'student', tempPassword: 'Welcome@2026' });
+    const weak = await request(app).post('/api/admin/users').set('Authorization', ADMIN).send({ fullName: 'Weak Pw', email: 'weak.pw@gutech.edu.pk', role: 'student', tempPassword: 'password' });
+    const forbidden = await request(app).post('/api/admin/users').set('Authorization', TEACHER_WEB).send({ fullName: 'Nope', email: 'nope@gutech.edu.pk', role: 'student', tempPassword: 'Welcome@2026' });
+    expect(duplicate.status).toBe(409);
+    expect(weak.status).toBe(422);
+    expect(forbidden.status).toBe(403);
+  });
+
+  it('prevents an admin from deactivating their own account', async () => {
+    const res = await request(app).patch('/api/admin/users/a0000000-0000-0000-0000-000000000001').set('Authorization', ADMIN).send({ isActive: false });
+    expect(res.status).toBe(422);
   });
 });

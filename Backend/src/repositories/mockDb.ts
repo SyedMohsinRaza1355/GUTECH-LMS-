@@ -1,6 +1,6 @@
 // ==============================================================================
-// GUTech Internal LMS - In-Memory State & Seed Data Store
-// 12 users: 2 admins, 3 teachers, 7 students — all with simple passwords
+// Ghazali University of Technology (GUTech) LMS - In-Memory State & Seed Data Store
+// 55 users: 2 admins, 3 teachers, 50 students (see roster.ts) - all with simple demo passwords
 // ==============================================================================
 
 import {
@@ -16,6 +16,7 @@ import {
   ChatMessage,
   Complaint
 } from '../types/index.js';
+import { roster, rosterStudents, avatarFor } from './roster.js';
 
 export interface MockDatabase {
   profiles: UserProfile[];
@@ -42,175 +43,23 @@ export const mockDb: MockDatabase = {
   // --------------------------------------------------------------------------
   // PROFILES  (2 admin · 3 teacher · 7 student)
   // --------------------------------------------------------------------------
-  profiles: [
-    // ── ADMINS ──────────────────────────────────────────────────────────────
-    {
-      id: 'a0000000-0000-0000-0000-000000000001',
-      fullName: 'Dr. Farooq Al-Balushi',
-      email: 'farooq.admin@gutech.edu.om',
-      role: 'admin',
-      rollNo: null,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Farooq&backgroundColor=1E3A5F&textColor=F59E0B',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 'a0000000-0000-0000-0000-000000000002',
-      fullName: 'Ms. Hana Al-Rawahi',
-      email: 'hana.admin@gutech.edu.om',
-      role: 'admin',
-      rollNo: null,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Hana&backgroundColor=1E3A5F&textColor=F59E0B',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-
-    // ── TEACHERS ────────────────────────────────────────────────────────────
-    {
-      id: 't0000000-0000-0000-0000-000000000001',
-      fullName: 'Prof. Tariq Al-Hinai',
-      email: 'tariq.teacher@gutech.edu.om',
-      role: 'teacher',
-      rollNo: null,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Tariq&backgroundColor=0F2137&textColor=FBBF24',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 't0000000-0000-0000-0000-000000000002',
-      fullName: 'Dr. Sarah Mitchell',
-      email: 'sarah.teacher@gutech.edu.om',
-      role: 'teacher',
-      rollNo: null,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Sarah&backgroundColor=0F2137&textColor=FBBF24',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 't0000000-0000-0000-0000-000000000003',
-      fullName: 'Dr. Khalid Al-Amri',
-      email: 'khalid.teacher@gutech.edu.om',
-      role: 'teacher',
-      rollNo: null,
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Khalid&backgroundColor=0F2137&textColor=FBBF24',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-
-    // ── STUDENTS ────────────────────────────────────────────────────────────
-    {
-      id: 's0000000-0000-0000-0000-000000000001',
-      fullName: 'Fatima Al-Zadjali',
-      email: 'fatima.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0101',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Fatima&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000002',
-      fullName: 'Ali Al-Lawati',
-      email: 'ali.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0102',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Ali&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000003',
-      fullName: 'Maryam Al-Kiyumi',
-      email: 'maryam.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0103',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Maryam&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000004',
-      fullName: 'Hamad Al-Busaidi',
-      email: 'hamad.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0104',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Hamad&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000005',
-      fullName: 'Noor Al-Rashdi',
-      email: 'noor.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0105',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Noor&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000006',
-      fullName: 'Omar Al-Siyabi',
-      email: 'omar.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0106',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Omar&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    },
-    {
-      id: 's0000000-0000-0000-0000-000000000007',
-      fullName: 'Layla Al-Harthi',
-      email: 'layla.student@gutech.edu.om',
-      role: 'student',
-      rollNo: 'GUT-2023-0107',
-      avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=Layla&backgroundColor=F59E0B&textColor=0A1628',
-      isActive: true,
-      mustChangePassword: false,
-      createdAt: '2026-09-01T08:00:00Z',
-      updatedAt: '2026-09-01T08:00:00Z'
-    }
-  ],
+  profiles: roster.map(person => ({
+    id: person.id,
+    fullName: person.fullName,
+    email: person.email,
+    role: person.role,
+    rollNo: person.rollNo,
+    avatarUrl: avatarFor(person),
+    isActive: true,
+    mustChangePassword: false,
+    createdAt: '2026-09-01T08:00:00Z',
+    updatedAt: '2026-09-01T08:00:00Z'
+  })),
 
   // --------------------------------------------------------------------------
-  // CREDENTIALS  (demo passwords — plain text for dev only)
+  // CREDENTIALS  (demo passwords - plain text for dev only)
   // --------------------------------------------------------------------------
-  credentials: [
-    { email: 'farooq.admin@gutech.edu.om',   password: 'Admin@123'   },
-    { email: 'hana.admin@gutech.edu.om',     password: 'Admin@456'   },
-    { email: 'tariq.teacher@gutech.edu.om',  password: 'Teach@123'   },
-    { email: 'sarah.teacher@gutech.edu.om',  password: 'Teach@456'   },
-    { email: 'khalid.teacher@gutech.edu.om', password: 'Teach@789'   },
-    { email: 'fatima.student@gutech.edu.om', password: 'Student@101' },
-    { email: 'ali.student@gutech.edu.om',    password: 'Student@102' },
-    { email: 'maryam.student@gutech.edu.om', password: 'Student@103' },
-    { email: 'hamad.student@gutech.edu.om',  password: 'Student@104' },
-    { email: 'noor.student@gutech.edu.om',   password: 'Student@105' },
-    { email: 'omar.student@gutech.edu.om',   password: 'Student@106' },
-    { email: 'layla.student@gutech.edu.om',  password: 'Student@107' }
-  ],
+  credentials: roster.map(person => ({ email: person.email, password: person.password })),
 
   // --------------------------------------------------------------------------
   // COURSES
@@ -271,10 +120,10 @@ export const mockDb: MockDatabase = {
     { courseId: 'c0000000-0000-0000-0000-000000000005', teacherId: 't0000000-0000-0000-0000-000000000002' }
   ],
 
-  enrollments: [1, 2, 3, 4, 5, 6, 7].flatMap(student =>
+  enrollments: rosterStudents.flatMap(student =>
     [1, 2, 3, 4, 5].map(course => ({
       courseId: `c0000000-0000-0000-0000-00000000000${course}`,
-      studentId: `s0000000-0000-0000-0000-00000000000${student}`
+      studentId: student.id
     }))
   ),
 
@@ -348,8 +197,8 @@ export const mockDb: MockDatabase = {
       id: 'sub00000-0000-0000-0000-000000000001',
       assignmentId: 'a1000000-0000-0000-0000-000000000001',
       studentId: 's0000000-0000-0000-0000-000000000001',
-      textAnswer: 'GitHub repository: https://github.com/fatima/web-tech-lab1',
-      filePath: 'submissions/a1/fatima_api_v1.zip',
+      textAnswer: 'GitHub repository: https://github.com/ayesha-siddiqui/web-tech-lab1',
+      filePath: 'submissions/a1/ayesha_api_v1.zip',
       submittedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
       isLate: false,
       marksObtained: 92,
@@ -362,7 +211,7 @@ export const mockDb: MockDatabase = {
       assignmentId: 'a1000000-0000-0000-0000-000000000001',
       studentId: 's0000000-0000-0000-0000-000000000002',
       textAnswer: 'Completed all required endpoints with Postman collection attached.',
-      filePath: 'submissions/a1/ali_submission.zip',
+      filePath: 'submissions/a1/usman_submission.zip',
       submittedAt: new Date(Date.now() - 1 * 86400000).toISOString(),
       isLate: false,
       marksObtained: 88,
@@ -492,9 +341,9 @@ export const mockDb: MockDatabase = {
       id: 'msg00000-0000-0000-0000-000000000001',
       courseId: 'c0000000-0000-0000-0000-000000000002',
       senderId: 't0000000-0000-0000-0000-000000000001',
-      senderName: 'Prof. Tariq Al-Hinai',
+      senderName: 'Prof. Imran Hanif',
       senderRole: 'teacher',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Tariq&backgroundColor=0F2137&textColor=FBBF24',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=0F2137&textColor=FBBF24',
       body: 'Hello everyone! Welcome to the WEB302 classroom channel. Feel free to ask questions here.',
       createdAt: new Date(Date.now() - 3 * 86400000).toISOString()
     },
@@ -502,9 +351,9 @@ export const mockDb: MockDatabase = {
       id: 'msg00000-0000-0000-0000-000000000002',
       courseId: 'c0000000-0000-0000-0000-000000000002',
       senderId: 's0000000-0000-0000-0000-000000000001',
-      senderName: 'Fatima Al-Zadjali',
+      senderName: 'Ayesha Siddiqui',
       senderRole: 'student',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Fatima&backgroundColor=F59E0B&textColor=0A1628',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Ayesha&backgroundColor=F59E0B&textColor=0A1628',
       body: 'Thank you Professor! Could you clarify if TypeScript strict mode is required for Assignment 1?',
       createdAt: new Date(Date.now() - 2 * 86400000).toISOString()
     },
@@ -512,9 +361,9 @@ export const mockDb: MockDatabase = {
       id: 'msg00000-0000-0000-0000-000000000003',
       courseId: 'c0000000-0000-0000-0000-000000000002',
       senderId: 't0000000-0000-0000-0000-000000000001',
-      senderName: 'Prof. Tariq Al-Hinai',
+      senderName: 'Prof. Imran Hanif',
       senderRole: 'teacher',
-      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Tariq&backgroundColor=0F2137&textColor=FBBF24',
+      senderAvatar: 'https://api.dicebear.com/7.x/initials/svg?seed=Imran&backgroundColor=0F2137&textColor=FBBF24',
       body: 'Yes, strict mode is required. No "any" types are permitted in core services.',
       createdAt: new Date(Date.now() - 1.9 * 86400000).toISOString()
     }
@@ -527,7 +376,7 @@ export const mockDb: MockDatabase = {
     {
       id: 'comp0000-0000-0000-0000-000000000001',
       raisedBy: 's0000000-0000-0000-0000-000000000001',
-      raisedByName: 'Fatima Al-Zadjali',
+      raisedByName: 'Ayesha Siddiqui',
       courseId: 'c0000000-0000-0000-0000-000000000002',
       courseTitle: 'WEB302 - Modern Web Technologies',
       category: 'academic',
@@ -542,7 +391,7 @@ export const mockDb: MockDatabase = {
     {
       id: 'comp0000-0000-0000-0000-000000000002',
       raisedBy: 's0000000-0000-0000-0000-000000000002',
-      raisedByName: 'Ali Al-Lawati',
+      raisedByName: 'Usman Ghani',
       courseId: null,
       courseTitle: null,
       category: 'technical',

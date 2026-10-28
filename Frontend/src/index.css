@@ -47,3 +47,52 @@
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ------------------------------------------------------------------ */
+/* Motion & polish (all gated behind prefers-reduced-motion)           */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: no-preference) {
+  .modal-pop { animation: modal-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .backdrop-fade { animation: fade-in 180ms ease-out both; }
+  .toast-enter { animation: toast-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .drawer-slide { animation: drawer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+  /* Children of .stagger fade/slide in one after another */
+  .stagger > * { animation: rise-in 480ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .stagger > *:nth-child(1) { animation-delay: 30ms; }
+  .stagger > *:nth-child(2) { animation-delay: 90ms; }
+  .stagger > *:nth-child(3) { animation-delay: 150ms; }
+  .stagger > *:nth-child(4) { animation-delay: 210ms; }
+  .stagger > *:nth-child(5) { animation-delay: 270ms; }
+  .stagger > *:nth-child(6) { animation-delay: 330ms; }
+  .stagger > *:nth-child(n+7) { animation-delay: 390ms; }
+
+  .card-lift { transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease; }
+  .card-lift:hover { transform: translateY(-3px); box-shadow: 0 22px 44px -18px rgba(15, 33, 55, 0.3); border-color: rgba(245, 158, 11, 0.45); }
+
+  .btn-shine { position: relative; overflow: hidden; }
+  .btn-shine::after {
+    content: ''; position: absolute; inset: 0; transform: translateX(-120%);
+    background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%);
+    transition: transform 650ms ease;
+  }
+  .btn-shine:hover::after { transform: translateX(120%); }
+
+  .aurora-orb { animation: float-orb 14s ease-in-out infinite; }
+  .aurora-orb-slow { animation: float-orb 20s ease-in-out infinite reverse; }
+  .gradient-flow { background-size: 220% 220%; animation: gradient-flow 16s ease infinite; }
+  .login-card { animation: rise-in 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .skeleton { background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 37%, #eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+}
+
+@keyframes modal-pop { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes float-orb { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -40px) scale(1.12); } }
+@keyframes gradient-flow { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* Visible keyboard focus everywhere */
+:focus-visible { outline: 2px solid #D97706; outline-offset: 2px; }

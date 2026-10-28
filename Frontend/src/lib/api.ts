@@ -17,6 +17,17 @@ import {
   PendingTask
 } from '../types/index.js';
 
+export interface AuditEntry {
+  id: number;
+  actorId: string;
+  actorName: string;
+  action: string;
+  entity: string;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  at: string;
+}
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 class ApiClient {
@@ -145,13 +156,17 @@ class ApiClient {
 
   // Admin Users
   async getUsersAdmin(role?: string, search?: string): Promise<UserProfile[]> {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ pageSize: '500' });
     if (role) params.set('role', role);
     if (search) params.set('search', search);
     return this.request<UserProfile[]>(`/admin/users?${params.toString()}`);
   }
 
-  async createUserAdmin(data: { fullName: string; email: string; role: string; rollNo?: string; tempPassword: string }): Promise<UserProfile> {
+  async getAuditTrail(limit = 100): Promise<AuditEntry[]> {
+    return this.request<AuditEntry[]>(`/admin/audit?limit=${limit}`);
+  }
+
+  async createUserAdmin(data: { fullName: string; email: string; role: string; rollNo?: string; courseIds?: string[]; tempPassword: string }): Promise<UserProfile> {
     return this.request<UserProfile>('/admin/users', {
       method: 'POST',
       body: JSON.stringify(data)
