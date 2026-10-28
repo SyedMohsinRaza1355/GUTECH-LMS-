@@ -1,146 +1,172 @@
-# GUTECH Student and Faculty Portal
+# GU TECH Learning Management Portal
 
-A role-based LMS prototype for Ghazali University of Technology (GUTech). It uses React, TypeScript, Vite, Node.js, Express, and Supabase Auth/Postgres.
+A role-based Learning Management System for **Ghazali University of Technology (GUTech)**. Admins provision accounts and courses, teachers publish and grade coursework, and students submit work, take quizzes and track their marks. Built with React, TypeScript, Vite, Node.js, Express and **Supabase** (Auth + Postgres + Storage), and deployed on Vercel.
 
-## What it includes
+| | |
+| --- | --- |
+| Live portal | https://gutech-lms.vercel.app |
+| Live API health check | https://gutech-lms-api.vercel.app/api/health |
+| Source code | https://github.com/SyedMohsinRaza1355/GUTECH-LMS- |
 
-- Credential login with separate admin, teacher, and student views and protected routes.
-- Admin user directory and account provisioning, course management, and enrollment workflows.
-- Course pages, assignments, quizzes, marks/gradebook, announcements, chat, and complaints interfaces.
-- Supabase schema migrations, row-level security policies, sample-account seeding, and backend request validation.
-- Responsive layouts for desktop and mobile.
+## Features
 
-### Data and persistence status
+**Everyone**
+- Sign-in with a username or institutional email (no public sign-up); forgot-password email and reset page; change password (checks the current one); edit your name.
+- Role-aware dashboard where every tile links to the page behind the number.
+- Announcements (global and per class), classroom chat per class, grievance desk (complaints), search and filters, success and error feedback on every action.
+- Crimson and white theme taken from the GU TECH logo; responsive from phone to desktop; keyboard accessible dialogs.
 
-Live Supabase Auth and database CRUD are implemented for authentication, profiles/user administration, courses/enrollments, and complaints. The assignment, quiz, marks, chat, and announcement controllers still use in-memory demo data in parts of their workflows. Treat those features as prototype demonstrations; they are not yet end-to-end persisted in Supabase. The app may show fallback demo content if its API is unreachable, so confirm the backend health check and database-backed directory/course data during the demo.
+**Students** - enrolled courses, assignments with timezone-aware due labels (overdue / due soon / done), submit and edit a submission before it is graded, timed quizzes (single choice, multi choice, true/false, auto-graded, resumable after a refresh), marks and GPA view, pending-work list.
 
-The local demo accounts are listed in `Demo Login Credentials.csv` (ignored by Git) and in the login page's sample-account panel. Passwords are never stored as plaintext in Supabase Auth. Do not use these sample passwords for real accounts.
+**Teachers** - assigned classes, **grading queue** with "Grade now" jump links, create assignments, upload resources (PDF, Word, PowerPoint, images, ZIP up to 25 MB), grading desk with marks and feedback, gradebook with CSV export, real class roster, class announcements.
 
-## Project structure
+**Admins** - user directory with search, role filters and paging; guided **new user** form (username suggestion, automatic roll number, generated password, course enrolment); activate / deactivate; course create / edit / delete; bulk CSV enrolment and unenrol; complaint resolution; **audit history** of grades and account changes.
+
+## Stack and structure
 
 ```text
-Frontend/                  React 18 + Vite + TypeScript SPA
-  src/components/          Shared UI and navigation
-  src/context/             Authentication/session state
-  src/features/            Login, dashboards, courses, marks, chat, etc.
-  src/lib/                 API client and utilities
+Frontend/                  React 18 + Vite + TypeScript + Tailwind SPA
+  public/                  GU TECH logo files and favicons
+  src/components/          Shared UI (buttons, dialogs, toasts, logo) and layout
+  src/context/             Authentication / session state
+  src/features/            One folder per area: auth, dashboard, courses, grading, marks, ...
+  src/lib/                 API client and helpers
 Backend/                   Express + TypeScript REST API
-  src/controllers/         API handlers
-  src/middleware/          Authentication, authorization, validation, errors
-  src/routes/              REST route definitions
-  scripts/                 Migration and demo-account seed scripts
-  supabase/migrations/      Postgres schema and RLS policies
-docs/                      Architecture, deployment, workflow, walkthrough
+  src/controllers/         Request handlers (Supabase when configured, demo data otherwise)
+  src/middleware/          Authentication, role checks, validation, rate limiting, errors
+  src/routes/              REST routes
+  src/schemas/             Zod request validation
+  src/tests/               Vitest + Supertest API tests
+  scripts/                 Migration, seed and credential-export scripts
+  supabase/                SQL schema, row-level-security policies
+docs/                      Assumptions, AI-assisted workflow, demo walkthrough plan
 ```
 
-## Requirements
+### Data and persistence
 
-- Node.js 20 or later and npm.
-- A Supabase project for live authentication and persistence.
+With Supabase configured, **every module is stored in Supabase**: users and profiles, courses, enrolments, assignments, submissions and grades, quizzes and attempts, resources (Storage bucket), announcements, chat, complaints and the audit log. Access is enforced on the server for every protected route (role and course membership), not just by hiding buttons.
 
-## Local setup
+Without Supabase keys the API falls back to a built-in demo data set so the project can still be explored offline. That mode keeps data in memory and is for local exploration only.
 
-1. Install backend packages and configure its environment:
+## Environment setup (`.env` guide)
+
+Never commit real `.env` files; they are git-ignored. Copy the templates and fill them in.
+
+### Backend: `Backend/.env`
+
+```bash
+cd Backend
+copy .env.example .env      # macOS/Linux: cp .env.example .env
+```
+
+| Variable | What it is | Where to get it |
+| --- | --- | --- |
+| `SUPABASE_URL` | Your project URL, `https://<ref>.supabase.co` | Supabase dashboard -> Project Settings -> API |
+| `SUPABASE_ANON_KEY` | Public (publishable) key, used for sign-in | Project Settings -> API Keys -> Publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Secret** server key that creates users and bypasses RLS | Project Settings -> API Keys -> Secret keys (`sb_secret_...`). Backend only, never in `VITE_` variables |
+| `DATABASE_URL` / `DIRECT_URL` | Postgres connection string, used only by `npm run db:migrate` | Project Settings -> Database -> Connection string |
+| `CLIENT_ORIGIN` | Exact URL of the frontend allowed by CORS | `http://localhost:5173` locally; your Vercel URL in production |
+| `PASSWORD_RESET_REDIRECT` | Page the reset-password email links to | `http://localhost:5173/reset-password` locally |
+| `JWT_SECRET` | Long random string | Generate one, e.g. `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `PORT` | API port | `4000` |
+
+In Supabase also add your frontend URL under Authentication -> URL Configuration so reset emails may redirect to it.
+
+### Frontend: `Frontend/.env`
+
+```bash
+cd Frontend
+copy .env.example .env
+```
+
+| Variable | Value |
+| --- | --- |
+| `VITE_API_URL` | The API base URL: `http://localhost:4000/api` locally, `https://gutech-lms-api.vercel.app/api` in production |
+
+## Run it locally
+
+Requirements: Node.js 20+ and npm; a Supabase project for the live mode.
+
+1. **Install and configure the backend**
 
    ```bash
    cd Backend
    npm ci
-   copy .env.example .env
+   copy .env.example .env      # then fill it in as described above
    ```
 
-   Fill `Backend/.env` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and a strong `JWT_SECRET`. The service-role key is server-only. Never put it in a `VITE_` variable or commit `.env`.
-
-2. Apply the database schema and seed the 12 demo users, three courses, teachers, and enrollments:
+2. **Create the database and demo data** (modifies the Supabase project in `.env`, so double-check it)
 
    ```bash
-   npm run db:migrate
-   npm run db:seed-demo
+   npm run db:migrate          # tables and row-level-security policies
+   npm run db:seed-demo        # accounts, 5 courses, sample coursework, and the private `resources` storage bucket
    ```
 
-   These commands modify the configured Supabase project. Run them only against the intended project. The seed script creates confirmed demo Auth users and matching profiles.
-
-3. Start the API in that `Backend` terminal:
+3. **Start the API** (health check at http://localhost:4000/api/health)
 
    ```bash
    npm run dev
    ```
 
-   The default API is `http://localhost:4000/api`; health check: `http://localhost:4000/api/health`.
-
-4. In a second terminal, configure and start the frontend:
+4. **Start the frontend** in a second terminal
 
    ```bash
    cd Frontend
    npm ci
-   copy .env.example .env
-   npm run dev
+   copy .env.example .env      # keep VITE_API_URL=http://localhost:4000/api
+   npm run dev                 # open http://localhost:5173
    ```
 
-   Set `VITE_API_URL=http://localhost:4000/api` in `Frontend/.env`, then open `http://localhost:5173`.
+If port 4000 is busy, an earlier API copy is still running; use it or stop it first.
 
-If port 4000 is already in use, the API is likely still running in another terminal. Use that running server or stop it before starting another copy.
-
-## Roles and sample accounts
-
-There are 2 admins, 3 teachers, and 50 students with Pakistani names. The sign-in page lists 1 admin, all teachers and 5 students; run `npm run export:credentials` in `Backend` to regenerate the full 55-account CSV. The login accepts either a username or full email. For username/password pairs, open the local `Demo Login Credentials.csv` or the login page's **Sample accounts** section. Primary demo accounts:
-
-| Role | Username | Demo password | Walkthrough focus |
-| --- | --- | --- | --- |
-| Admin | `nadeem.admin` | `Admin@123` | User directory, provisioning, course and enrollment management |
-| Teacher | `imran.teacher` | `Teach@123` | Assigned classes and faculty view |
-| Student | `ayesha.siddiqui` | `Student@101` | Student dashboard, course access, marks and student navigation |
-
-Other sample accounts are listed locally. This is a demo-only credential list; do not use it for real accounts.
-
-## Verify locally
+### Verify
 
 ```bash
-cd Backend
-npm test
-npm run build
-cd ../Frontend
-npm run build
+cd Backend && npm test && npm run build     # 24 API tests, type-check and compile
+cd ../Frontend && npm run build
 ```
 
-## Live deployment: Vercel frontend + API
+## Demo accounts
 
-The production app is deployed to Vercel as two projects from this repository:
+The sign-in page lists them: tap a row to fill the form. The full 55-account list is generated with `npm run export:credentials` (writes `Demo Login Credentials.csv`, which is git-ignored). Demo passwords are for demonstration only.
 
-| Project | Vercel root directory | Production URL |
+| Role | Username | Password |
 | --- | --- | --- |
-| React frontend (`gutech-lms`) | `Frontend` | [gutech-lms.vercel.app](https://gutech-lms.vercel.app) |
-| Express API (`gutech-lms-api`) | `Backend` | [gutech-lms-api.vercel.app](https://gutech-lms-api.vercel.app) |
+| Admin | `nadeem.admin` | `Admin@123` |
+| Teacher | `imran.teacher` | `Teach@123` |
+| Teacher | `sadia.teacher` | `Teach@456` |
+| Teacher | `khurram.teacher` | `Teach@789` |
+| Student | `ayesha.siddiqui` | `Student@101` |
+| Student | `usman.ghani` | `Student@102` |
 
-The API health endpoint is [gutech-lms-api.vercel.app/api/health](https://gutech-lms-api.vercel.app/api/health). Both projects are connected to the public GitHub repository and deploy from `main`: [SyedMohsinRaza1355/GUTECH-LMS-](https://github.com/SyedMohsinRaza1355/GUTECH-LMS-).
+Students 101-150 use `Student@101` ... `Student@150` in the order of the roster.
 
-Vercel production environment variables are configured in the dashboards. The API keeps `SUPABASE_SERVICE_ROLE_KEY` and `JWT_SECRET` server-side as secrets. The frontend uses `VITE_API_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`; the anon key is public by design and database access must remain constrained by RLS. Do not put the service-role key in any `VITE_` variable or commit `.env` files.
+## Live deployment (Vercel + Supabase)
 
-The live Supabase database has 12 demo users (2 admins, 3 teachers, 7 students), three courses, teacher assignments, and student enrollments. To initialize a different Supabase project, confirm it is the intended project, apply migrations, then run the seed script from `Backend`:
+Two Vercel projects deploy from `main` of this repository:
 
-```bash
-npm run db:migrate
-npm run db:seed-demo
-```
+| Project | Vercel root directory | URL |
+| --- | --- | --- |
+| Frontend `gutech-lms` | `Frontend` | https://gutech-lms.vercel.app |
+| API `gutech-lms-api` | `Backend` | https://gutech-lms-api.vercel.app |
 
-For local development, run the backend and frontend in separate terminals as described in [Local setup](#local-setup). The deployed API runs on Vercel, so a local backend process is not needed for the production site.
+Set the variables from the tables above in each project's Environment Variables (API: Supabase keys, `CLIENT_ORIGIN`, `PASSWORD_RESET_REDIRECT`, `JWT_SECRET`; frontend: `VITE_API_URL`). Rotate a key in Supabase, update it in Vercel, then redeploy.
 
-Do not claim a live deployment unless the provider dashboards show successful deployments and the browser demo uses the public URLs above.
+## Submission checklist
 
-## Submission materials
-
-- [Architecture and assumptions](docs/ASSUMPTIONS.md)
-- [Timed feature walkthrough plan](docs/DEMO_WALKTHROUGH.md)
-- [AI-assisted workflow summary](docs/AI_ASSISTED_WORKFLOW.md)
-
-| Deliverable | Link |
+| Requirement | Where |
 | --- | --- |
-| Public GitHub repository | [SyedMohsinRaza1355/GUTECH-LMS-](https://github.com/SyedMohsinRaza1355/GUTECH-LMS-) |
-| Live portal | [gutech-lms.vercel.app](https://gutech-lms.vercel.app) |
-| Hosted feature walkthrough | Record and upload a 3–5 minute video to YouTube, Loom, or Google Drive, then add its share link here. |
+| Public GitHub repository, clean organised code, README with overview, `.env` guide and run steps | This repository and README |
+| Live deployment on Vercel, connected to a live Supabase instance with working auth and CRUD | https://gutech-lms.vercel.app |
+| 3-5 minute walkthrough video (demo, key features, AI-assisted workflow) | Plan: [docs/DEMO_WALKTHROUGH.md](docs/DEMO_WALKTHROUGH.md). Add the uploaded video link below. |
+| Walkthrough video link | _add the YouTube / Loom / Drive link here after recording_ |
+
+More detail: [assumptions and architecture](docs/ASSUMPTIONS.md), [AI-assisted workflow](docs/AI_ASSISTED_WORKFLOW.md), [video plan](docs/DEMO_WALKTHROUGH.md).
 
 ## Security notes
 
-- Public signup is disabled; admin provisioning is the account creation flow.
-- Passwords are handled by Supabase Auth, which stores password hashes; this app does not provide a way to retrieve a user's password.
-- Keep service-role credentials server-side. Apply least-privilege RLS policies and use non-production demo data for presentations.
-- A public repository must not contain project credentials, `.env` files, or the local plaintext demo credential spreadsheet.
+- Public sign-up is disabled; admins create accounts.
+- Passwords live only in Supabase Auth (hashed); the app cannot show anyone's password. Changing a password verifies the current one first.
+- The service-role key and `JWT_SECRET` stay server-side. Row-level security is enabled on the tables.
+- Every protected action is authorised on the server by role and course membership; sensitive changes are written to an audit log.
+- Never commit `.env` files or the local credentials spreadsheet.

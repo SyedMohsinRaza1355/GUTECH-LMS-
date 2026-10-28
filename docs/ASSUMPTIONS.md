@@ -1,4 +1,4 @@
-# GUTech LMS — Architecture & Build Assumptions
+# GUTech LMS - Architecture & Build Assumptions
 
 This document records architectural decisions, assumptions, and conventions adopted during the implementation of the internal GUTech Learning Management System (LMS) in accordance with the specification.
 
@@ -13,7 +13,7 @@ This document records architectural decisions, assumptions, and conventions adop
 - In compliance with Non-Negotiable Rule 6, **public registration is completely disabled**.
 - Visiting `/signup` returns an explicit HTTP 404 response.
 - User accounts are created exclusively by administrative staff via the Admin User Directory.
-- For immediate offline/pre-credential testing, a built-in session state with seeded demo profiles for Student, Teacher, and Administrator is integrated. Once the live Supabase credentials are provided, live Supabase Auth and database operations are seamlessly enabled.
+- For immediate offline/pre-credential testing, a built-in session state with seeded demo profiles for Student, Teacher, and Administrator is integrated. Once the live Supabase credentials are provided, live Supabase Auth and database operations are enabled.
 
 ### 3. Quiz Grading & Lateness
 - Server auto-grades MCQ (single/multi) and True/False assessments against the isolated `quiz_answers` store.

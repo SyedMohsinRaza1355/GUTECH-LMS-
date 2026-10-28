@@ -23,10 +23,21 @@ This prototype was built iteratively with ChatGPT/Codex as an AI pair-programmin
 
 - Reviewed generated code and migration effects before applying them to the configured demo project.
 - Kept privileged Supabase credentials in backend-only local/deployment environment variables.
-- Verified backend tests (8 passing at the last recorded run), TypeScript/production builds, live login, seeded user visibility, course create/update/list/delete, invalid-password rejection, and a student `403` response for an admin endpoint.
-- The current live-persistence boundary is documented in the root README. Assignment, quiz, marks, chat, and announcement flows still contain in-memory demo behavior and need Supabase integration before they can be presented as production-ready CRUD.
+- Verified backend tests (24 passing at the last recorded run), TypeScript/production builds, live login, seeded user visibility, course create/update/list/delete, invalid-password rejection, and a student `403` response for an admin endpoint.
+- All modules, including announcements and chat, persist in Supabase when the API is configured; without Supabase keys the API serves a built-in demo data set (see the README).
+
+## Second phase: Claude Code (Oct 2026)
+
+The project was extended in a second session with Claude Code, again as a pair programmer with every change reviewed and verified:
+
+- **Roster and branding:** Pakistani names and usernames for 2 admins, 3 teachers and 50 students from one roster file that feeds the API, the Supabase seed script and the credentials export; "Ghazali University of Technology" naming; GU TECH logo and crimson/white theme.
+- **Teacher workflow:** grading queue page and API with deep links into the grading desk; dashboard tiles that lead to the work; mark validation and per-action feedback.
+- **Admin workflow:** guided new-user form with automatic roll number and course enrolment; audit history for grades and account changes.
+- **Tester pass:** drove the app as student, teacher and admin in the browser and through the API. It found, and the work then fixed, dead "Create Assignment" and "Upload Resource" buttons, a hard-coded fake student roster, a change-password endpoint that always reported success, multi-select quiz questions that could never score, silent failures, and announcements and chat that were not stored in Supabase.
+- **Verification:** 24 automated API tests, TypeScript and production builds, live API checks against Supabase (login, data, role guards, create/read/update/delete for each module), and browser checks at desktop and phone width.
+- **Human decisions:** which features to build, security-sensitive actions (key rotation, deleting accounts, deploys) were approved by the developer, and secrets were never committed.
 
 ## Suggested evidence to include with the class submission
 
 - A short screen recording showing the prompt-to-implementation loop, code review, and a verification result. Do not expose secrets or paste private credentials into a public recording.
-- The public repository URL, Vercel URL, Render API health URL, and walkthrough video URL after each is actually published.
+- The public repository URL, Vercel URL, Vercel API health URL, and walkthrough video URL after each is actually published.
