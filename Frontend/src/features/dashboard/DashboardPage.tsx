@@ -91,7 +91,7 @@ export const DashboardPage: React.FC = () => {
       const nextCourses = courseResult.status === 'fulfilled' ? courseResult.value : [];
       const announcementList = announcementResult.status === 'fulfilled' ? announcementResult.value : [];
       const nextTasks = taskResult.status === 'fulfilled' ? taskResult.value : [];
-      const nextAverage = marksResult.status === 'fulfilled' && marksResult.value ? marksResult.value.summary.percentage : null;
+      const nextAverage = marksResult.status === 'fulfilled' && marksResult.value && marksResult.value.summary.gradedCount > 0 ? marksResult.value.summary.percentage : null;
       let nextAdminStats = adminStats;
       if (role === 'admin' && adminResult.status === 'fulfilled' && adminResult.value) {
         const [usersResult, grievancesResult, health] = adminResult.value;

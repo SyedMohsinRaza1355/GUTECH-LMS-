@@ -20,9 +20,12 @@ import {
 import { Button, Card, Input, RoleBadge } from '../../components/ui/index.js';
 import { formatDate } from '../../lib/utils.js';
 import { api } from '../../lib/api.js';
+import { useToast, errorMessage } from '../../components/ui/Toast.js';
 
 export const ProfilePage: React.FC = () => {
   const { user, updateUserProfile } = useAuth();
+  const toast = useToast();
+  const [savingProfile, setSavingProfile] = useState(false);
 
   // Change Password state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -71,12 +74,28 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateUserProfile({ fullName });
-    setIsEditing(false);
-    setEditSuccess(true);
-    setTimeout(() => setEditSuccess(false), 3000);
+    const cleaned = fullName.trim().replace(/\s+/g, ' ');
+    if (cleaned.length < 2) {
+      toast.error('Enter your full name');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const saved = await api.updateMyProfile({ fullName: cleaned });
+      updateUserProfile({ fullName: saved.fullName });
+      setFullName(saved.fullName);
+      setIsEditing(false);
+      setEditSuccess(true);
+      toast.success('Profile updated');
+      setTimeout(() => setEditSuccess(false), 3000);
+    } catch (error) {
+      // Stay in edit mode with the typed name so it can be corrected and saved again.
+      toast.error('Your profile was not saved', errorMessage(error));
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   if (!user) return null;
@@ -219,7 +238,7 @@ export const ProfilePage: React.FC = () => {
                   disabled
                 />
               )}
-              <Button type="submit" variant="primary" size="sm" className="w-full">
+              <Button type="submit" variant="primary" size="sm" className="w-full" isLoading={savingProfile}>
                 Save Changes
               </Button>
             </form>

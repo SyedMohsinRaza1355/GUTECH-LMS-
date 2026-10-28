@@ -1,6 +1,7 @@
 // ==============================================================================
 // GUTech Internal LMS - Course & Enrollment Controller
 // ==============================================================================
+import { recordAudit } from '../utils/audit.js';
 
 import { Request, Response, NextFunction } from 'express';
 import { mockDb } from '../repositories/mockDb.js';
@@ -312,6 +313,7 @@ export const unenrollStudent = async (req: Request, res: Response, next: NextFun
       const { data, error } = await supabaseAdmin.from('enrollments').delete().eq('course_id', id).eq('student_id', studentId).select('student_id');
       if (error) throw error;
       if (!data?.length) return next(notFound('Student was not enrolled in this course'));
+      await recordAudit({ actorId: req.user!.id, action: 'course.unenroll', entity: 'enrollment', entityId: studentId, live: true, metadata: { courseId: id } });
       return res.status(200).json({ data: { message: 'Student successfully unenrolled from course' } });
     }
 
@@ -322,6 +324,7 @@ export const unenrollStudent = async (req: Request, res: Response, next: NextFun
       return next(notFound('Student was not enrolled in this course'));
     }
 
+    await recordAudit({ actorId: req.user!.id, action: 'course.unenroll', entity: 'enrollment', entityId: studentId, live: false, metadata: { courseId: id } });
     return res.status(200).json({
       data: { message: 'Student successfully unenrolled from course' }
     });
@@ -440,6 +443,40 @@ export const getCourseDetail = async (req: Request, res: Response, next: NextFun
         studentsCount: studentIds.length
       }
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Real roster for a course: admins, and teachers assigned to it.
+export const listCourseStudents = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+    if (!user || (user.role !== 'admin' && user.role !== 'teacher')) return next(forbidden('Only teachers and admins can view a class roster'));
+
+    if (liveRequest(req)) {
+      if (user.role === 'teacher') {
+        const { data: link, error: linkError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', id).eq('teacher_id', user.id).maybeSingle();
+        if (linkError) throw linkError;
+        if (!link) return next(forbidden('You are not assigned to this course'));
+      }
+      const { data, error } = await supabaseAdmin.from('enrollments').select('profiles(id,full_name,email,roll_no,is_active)').eq('course_id', id);
+      if (error) throw error;
+      const students = (data || []).map((row: any) => row.profiles).filter(Boolean)
+        .map((p: any) => ({ id: p.id, fullName: p.full_name, email: p.email, rollNo: p.roll_no, isActive: p.is_active }))
+        .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
+      return res.status(200).json({ data: students });
+    }
+
+    if (!mockDb.courses.some(course => course.id === id)) return next(notFound('Course not found'));
+    if (user.role === 'teacher' && !mockDb.courseTeachers.some(link => link.courseId === id && link.teacherId === user.id)) return next(forbidden('You are not assigned to this course'));
+    const students = mockDb.enrollments.filter(e => e.courseId === id)
+      .map(e => mockDb.profiles.find(p => p.id === e.studentId))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      .map(p => ({ id: p.id, fullName: p.fullName, email: p.email, rollNo: p.rollNo || null, isActive: p.isActive }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return res.status(200).json({ data: students });
   } catch (err) {
     next(err);
   }

@@ -103,10 +103,21 @@ class ApiClient {
     return this.request<{ profile: UserProfile }>('/auth/me');
   }
 
+  async updateMyProfile(data: { fullName: string }): Promise<UserProfile> {
+    return this.request<UserProfile>('/auth/me', { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
   async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
     return this.request<{ message: string }>('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword })
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword })
     });
   }
 
@@ -144,6 +155,14 @@ class ApiClient {
 
   async deleteCourseAdmin(courseId: string): Promise<{ message: string }> {
     return this.request<{ message: string }>(`/admin/courses/${courseId}`, { method: 'DELETE' });
+  }
+
+  async getCourseStudents(courseId: string): Promise<Array<{ id: string; fullName: string; email: string; rollNo: string | null; isActive: boolean }>> {
+    return this.request(`/courses/${courseId}/students`);
+  }
+
+  async unenrollStudent(courseId: string, studentId: string): Promise<{ message: string }> {
+    return this.request(`/admin/courses/${courseId}/enrollments/${studentId}`, { method: 'DELETE' });
   }
 
   async enrollStudents(courseId: string, studentIds?: string[], csvContent?: string) {
@@ -193,10 +212,27 @@ class ApiClient {
     return this.request<Resource[]>(`/courses/${courseId}/resources`);
   }
 
-  async createResource(courseId: string, data: { title: string; description?: string; fileName?: string; mimeType?: string; sizeBytes?: number }): Promise<Resource> {
+  async createResource(courseId: string, data: { title: string; description?: string; file?: File | null }): Promise<Resource> {
+    if (data.file) {
+      // Multipart upload: let the browser set the Content-Type boundary itself.
+      const body = new FormData();
+      body.append('title', data.title);
+      if (data.description) body.append('description', data.description);
+      body.append('file', data.file);
+      const token = this.getToken();
+      let response: Response;
+      try {
+        response = await fetch(`${API_BASE_URL}/courses/${courseId}/resources`, { method: 'POST', body, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      } catch {
+        throw new Error('Cannot reach the server. Check your internet connection and try again.');
+      }
+      const json = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(json?.error?.message || `Upload failed with status ${response.status}`);
+      return json.data as Resource;
+    }
     return this.request<Resource>(`/courses/${courseId}/resources`, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify({ title: data.title, description: data.description })
     });
   }
 

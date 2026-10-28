@@ -18,12 +18,13 @@ import {
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Textarea, ComplaintBadge, EmptyState } from '../../components/ui/index.js';
 import { LoadError } from '../../components/ui/index.js';
-import { errorMessage } from '../../components/ui/Toast.js';
+import { errorMessage, useToast } from '../../components/ui/Toast.js';
 import { Complaint, ComplaintStatus } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 import { formatDate, formatDateTime } from '../../lib/utils.js';
 
 export const ComplaintsPage: React.FC = () => {
+  const toast = useToast();
   const { user, role } = useAuth();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +86,7 @@ export const ComplaintsPage: React.FC = () => {
       setCreateModalOpen(false);
       setSubject('');
       setDescription('');
+      toast.success('Complaint submitted', 'The administration has been notified. You can track its status here.');
     } catch (err: unknown) {
       setCreateError((err as Error)?.message || 'Failed to submit complaint');
     } finally {
@@ -108,6 +110,7 @@ export const ComplaintsPage: React.FC = () => {
       setComplaints(complaints.map(c => c.id === selectedComplaint.id ? updated : c));
       setAdminModalOpen(false);
       setSelectedComplaint(null);
+      toast.success('Ticket updated', 'The student can now see your response.');
     } catch (err: unknown) {
       setAdminError((err as Error)?.message || 'Failed to update ticket');
     } finally {

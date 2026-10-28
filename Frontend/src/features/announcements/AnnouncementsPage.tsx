@@ -96,7 +96,8 @@ export const AnnouncementsPage: React.FC = () => {
         body,
         isPinned
       });
-      setAnnouncements([newAnn, ...announcements]);
+      const targetCourse = myCourses.find(course => course.id === targetCourseId);
+      setAnnouncements([{ ...newAnn, courseTitle: newAnn.courseTitle || (targetType === 'course' && targetCourse ? `${targetCourse.code}: ${targetCourse.title}` : null), isRead: true } as Announcement, ...announcements]);
       setModalOpen(false);
       setTitle('');
       setBody('');

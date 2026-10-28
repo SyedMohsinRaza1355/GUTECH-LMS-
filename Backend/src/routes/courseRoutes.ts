@@ -4,7 +4,9 @@
 
 import { Router } from 'express';
 import multer from 'multer';
-import { getMyCourses, getCourseDetail } from '../controllers/courseController.js';
+import { getMyCourses, getCourseDetail,
+  listCourseStudents
+} from '../controllers/courseController.js';
 import { listCourseResources, createResource } from '../controllers/resourceController.js';
 import { listAssignments, createAssignment } from '../controllers/assignmentController.js';
 import { listCourseQuizzes, createQuiz } from '../controllers/quizController.js';
@@ -44,6 +46,7 @@ router.get('/:id/messages', listChatMessages);
 router.post('/:id/messages', chatRateLimiter, validateRequest({ body: sendMessageSchema }), sendChatMessage);
 
 // Gradebook
+router.get('/:id/students', requireRole('admin', 'teacher'), listCourseStudents);
 router.get('/:id/gradebook', requireRole('admin', 'teacher'), getCourseGradebook);
 router.get('/:id/gradebook.csv', requireRole('admin', 'teacher'), exportGradebookCsv);
 

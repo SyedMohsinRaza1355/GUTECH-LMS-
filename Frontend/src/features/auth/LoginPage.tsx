@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Button, Input, Modal } from '../../components/ui/index.js';
+import { api } from '../../lib/api.js';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -50,14 +51,27 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setForgotSuccess(true);
-    setTimeout(() => {
-      setForgotModalOpen(false);
-      setForgotSuccess(false);
-      setForgotEmail('');
-    }, 2500);
+    setForgotError(null);
+    setForgotLoading(true);
+    try {
+      await api.forgotPassword(forgotEmail.trim());
+      setForgotSuccess(true);
+      setTimeout(() => {
+        setForgotModalOpen(false);
+        setForgotSuccess(false);
+        setForgotEmail('');
+      }, 4000);
+    } catch (err) {
+      // Never reveal whether the address exists; only report problems reaching the service or rate limits.
+      setForgotError((err as Error)?.message || 'The request could not be sent. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
@@ -80,7 +94,7 @@ export const LoginPage: React.FC = () => {
         {/* Login Card */}
         <div className="bg-white/95 rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/20 backdrop-blur-xl">
           {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3">
+            <div role="alert" className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-rose-800 font-medium">
                 <p className="font-bold">Authentication Failed</p>
@@ -91,11 +105,12 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label htmlFor="login-username" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Username or Institutional Email
               </label>
               <div className="relative">
                 <input
+                  id="login-username"
                   type="text"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -109,7 +124,7 @@ export const LoginPage: React.FC = () => {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <label htmlFor="login-password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Password
                 </label>
                 <button
@@ -122,6 +137,7 @@ export const LoginPage: React.FC = () => {
               </div>
               <div className="relative">
                 <input
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -133,6 +149,7 @@ export const LoginPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                   className="p-1 text-slate-400 hover:text-slate-600 absolute right-3 top-2.5"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -210,7 +227,8 @@ export const LoginPage: React.FC = () => {
               placeholder="name@gutech.edu.pk"
               required
             />
-            <Button type="submit" variant="primary" className="w-full">
+            {forgotError && <p role="alert" className="text-xs font-semibold text-rose-700">{forgotError}</p>}
+            <Button type="submit" variant="primary" className="w-full" isLoading={forgotLoading}>
               Send Reset Instructions
             </Button>
           </form>

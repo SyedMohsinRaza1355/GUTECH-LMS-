@@ -9,6 +9,7 @@ import {
   refreshSession,
   getMe,
   forgotPassword,
+  updateMe,
   resetPassword,
   changePassword
 } from '../controllers/authController.js';
@@ -17,6 +18,7 @@ import { validateRequest } from '../middleware/validate.js';
 import {
   loginSchema,
   forgotPasswordSchema,
+  updateMeSchema,
   resetPasswordSchema,
   changePasswordSchema
 } from '../schemas/index.js';
@@ -31,6 +33,7 @@ router.post('/login', loginRateLimiter, validateRequest({ body: loginSchema }), 
 router.post('/logout', requireAuth, logout);
 router.post('/refresh', refreshSession);
 router.get('/me', requireAuth, getMe);
+router.patch('/me', requireAuth, validateRequest({ body: updateMeSchema }), updateMe);
 router.post('/forgot-password', forgotPasswordRateLimiter, validateRequest({ body: forgotPasswordSchema }), forgotPassword);
 router.post('/reset-password', validateRequest({ body: resetPasswordSchema }), resetPassword);
 router.post('/change-password', requireAuth, validateRequest({ body: changePasswordSchema }), changePassword);

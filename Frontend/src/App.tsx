@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './context/AuthContext.js';
 import { ToastProvider } from './components/ui/Toast.js';
 import { AppLayout } from './components/layout/AppLayout.js';
 import { LoginPage } from './features/auth/LoginPage.js';
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage.js';
 import { ProfilePage } from './features/profile/ProfilePage.js';
 import { DashboardPage } from './features/dashboard/DashboardPage.js';
 import { CourseListPage } from './features/courses/CourseListPage.js';
@@ -52,6 +53,7 @@ export const App: React.FC = () => {
         <Routes>
           {/* Public Login Route (No Sign-up Route per Spec Rule 6) */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Explicit 404 for any /signup requests */}
           <Route

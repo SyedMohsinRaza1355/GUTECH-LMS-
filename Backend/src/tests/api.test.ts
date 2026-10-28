@@ -195,3 +195,63 @@ describe('Work queues and quiz attempts', () => {
     expect(retake.status).toBe(409);
   });
 });
+
+describe('Password change', () => {
+  const user = 'Bearer demo-token-s0000000-0000-0000-0000-000000000010';
+  it('rejects a wrong current password and accepts the right one, then the new password logs in', async () => {
+    const wrong = await request(app).post('/api/auth/change-password').set('Authorization', user).send({ currentPassword: 'Wrong@12345', newPassword: 'Brand-New-Pass1' });
+    expect(wrong.status).toBe(422);
+    expect(wrong.body.error.message).toMatch(/incorrect/i);
+    const same = await request(app).post('/api/auth/change-password').set('Authorization', user).send({ currentPassword: 'Student@110', newPassword: 'Student@110' });
+    expect(same.status).toBe(422);
+    const ok = await request(app).post('/api/auth/change-password').set('Authorization', user).send({ currentPassword: 'Student@110', newPassword: 'Brand-New-Pass1' });
+    expect(ok.status).toBe(200);
+    const oldLogin = await request(app).post('/api/auth/login').send({ email: 'shahzaib.hussain', password: 'Student@110' });
+    expect(oldLogin.status).toBe(401);
+    const newLogin = await request(app).post('/api/auth/login').send({ email: 'shahzaib.hussain', password: 'Brand-New-Pass1' });
+    expect(newLogin.status).toBe(200);
+  });
+});
+
+describe('Class roster', () => {
+  const WEB = 'c0000000-0000-0000-0000-000000000002';
+  it('shows the real enrolled students to the course teacher and admin only', async () => {
+    const teacher = await request(app).get(`/api/courses/${WEB}/students`).set('Authorization', TEACHER_WEB);
+    expect(teacher.status).toBe(200);
+    expect(teacher.body.data.length).toBeGreaterThanOrEqual(50);
+    expect(teacher.body.data[0]).toMatchObject({ fullName: expect.any(String), email: expect.stringContaining('@gutech.edu.pk') });
+    expect((await request(app).get(`/api/courses/${WEB}/students`).set('Authorization', ADMIN)).status).toBe(200);
+    expect((await request(app).get(`/api/courses/${WEB}/students`).set('Authorization', TEACHER_OTHER)).status).toBe(403);
+    expect((await request(app).get(`/api/courses/${WEB}/students`).set('Authorization', STUDENT)).status).toBe(403);
+  });
+
+  it('lets an admin unenroll a student, who then disappears from the roster', async () => {
+    const target = 's0000000-0000-0000-0000-000000000020';
+    const res = await request(app).delete(`/api/admin/courses/${WEB}/enrollments/${target}`).set('Authorization', ADMIN);
+    expect(res.status).toBe(200);
+    const after = await request(app).get(`/api/courses/${WEB}/students`).set('Authorization', TEACHER_WEB);
+    expect(after.body.data.some((s: { id: string }) => s.id === target)).toBe(false);
+  });
+});
+
+describe('Profile and recovery', () => {
+  it('saves a changed full name on the server, validates it, and rejects anonymous calls', async () => {
+    const me = 'Bearer demo-token-s0000000-0000-0000-0000-000000000030';
+    const ok = await request(app).patch('/api/auth/me').set('Authorization', me).send({ fullName: '  Updated   Name ' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.fullName).toBe('Updated Name');
+    const users = await request(app).get('/api/admin/users?search=Updated%20Name').set('Authorization', ADMIN);
+    expect(users.body.data.some((u: { fullName: string }) => u.fullName === 'Updated Name')).toBe(true);
+    expect((await request(app).patch('/api/auth/me').set('Authorization', me).send({ fullName: 'A' })).status).toBe(422);
+    expect((await request(app).patch('/api/auth/me').send({ fullName: 'Nope Nope' })).status).toBe(401);
+  });
+
+  it('answers forgot-password identically for any address and refuses a bogus reset token', async () => {
+    const known = await request(app).post('/api/auth/forgot-password').send({ email: 'ayesha.siddiqui@gutech.edu.pk' });
+    const unknown = await request(app).post('/api/auth/forgot-password').send({ email: 'nobody@example.com' });
+    expect(known.status).toBe(200);
+    expect(unknown.body).toEqual(known.body);
+    const reset = await request(app).post('/api/auth/reset-password').send({ token: 'not-a-real-token', newPassword: 'Another-Pass-123' });
+    expect(reset.status).toBe(422);
+  });
+});

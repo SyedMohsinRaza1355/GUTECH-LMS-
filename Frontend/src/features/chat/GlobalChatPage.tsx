@@ -95,6 +95,18 @@ export const GlobalChatPage: React.FC = () => {
     return <LoadError title="Class channels could not be loaded" message={coursesError} onRetry={() => setReloadKey(key => key + 1)} />;
   }
 
+  if (!coursesError && courses.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <h1 className="text-2xl font-extrabold text-navy-950 tracking-tight">Classroom Group Channels</h1>
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 p-10 text-center">
+          <p className="text-base font-semibold text-slate-800">No class channels yet</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">Each class you are enrolled in or teach gets its own channel. Once you have a class, it will appear here.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 max-w-6xl mx-auto h-[calc(100vh-140px)] flex flex-col">
       <div>

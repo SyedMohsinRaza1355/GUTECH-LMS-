@@ -45,6 +45,8 @@ const actionLabels: Record<string, string> = {
   'user.activate': 'Account activated',
   'user.deactivate': 'Account deactivated',
   'user.reset-password': 'Password reset requested',
+  'user.change-password': 'Password changed',
+  'course.unenroll': 'Student unenrolled from a course',
   'grade.save': 'Grade saved'
 };
 

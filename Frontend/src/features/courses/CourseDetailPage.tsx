@@ -27,7 +27,7 @@ import {
   ChevronRight,
   ExternalLink
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, Input, EmptyState, LoadError } from '../../components/ui/index.js';
+import { Button, Card, Badge, Modal, Input, Textarea, EmptyState, LoadError } from '../../components/ui/index.js';
 import {
   Course,
   Resource,
@@ -56,6 +56,11 @@ export const CourseDetailPage: React.FC = () => {
   const { user, role } = useAuth();
   const toast = useToast();
   const [courseError, setCourseError] = useState<string | null>(null);
+  const [roster, setRoster] = useState<Array<{ id: string; fullName: string; email: string; rollNo: string | null; isActive: boolean }>>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [rosterReload, setRosterReload] = useState(0);
   const [partialErrors, setPartialErrors] = useState<string[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -70,6 +75,9 @@ export const CourseDetailPage: React.FC = () => {
   const [resourceModalOpen, setResourceModalOpen] = useState(false);
   const [resourceTitle, setResourceTitle] = useState('');
   const [resourceDesc, setResourceDesc] = useState('');
+  const [resourceFile, setResourceFile] = useState<File | null>(null);
+  const [savingResource, setSavingResource] = useState(false);
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
   // Assignments state
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -103,6 +111,7 @@ export const CourseDetailPage: React.FC = () => {
   const [quizTimerSeconds, setQuizTimerSeconds] = useState<number>(0);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string[]>>({});
   const [quizResultScore, setQuizResultScore] = useState<number | null>(null);
+  const [quizResultTotal, setQuizResultTotal] = useState<number | null>(null);
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -198,6 +207,30 @@ export const CourseDetailPage: React.FC = () => {
     api.getCourseGradebook(courseId).then(setGradebookData).catch(() => setGradebookData(null));
   }, [courseId, activeTab, role]);
 
+  useEffect(() => {
+    if (!courseId || activeTab !== 'students' || (role !== 'teacher' && role !== 'admin')) return;
+    let current = true;
+    setRosterLoading(true);
+    setRosterError(null);
+    api.getCourseStudents(courseId)
+      .then(list => { if (current) setRoster(list); })
+      .catch(error => { if (current) setRosterError(errorMessage(error, 'The roster could not be loaded.')); })
+      .finally(() => { if (current) setRosterLoading(false); });
+    return () => { current = false; };
+  }, [courseId, activeTab, role, rosterReload]);
+
+  const handleUnenroll = async (student: { id: string; fullName: string }) => {
+    if (!courseId) return;
+    if (!window.confirm(`Unenroll ${student.fullName} from this course? They will lose access to its work and chat.`)) return;
+    try {
+      await api.unenrollStudent(courseId, student.id);
+      setRoster(current => current.filter(item => item.id !== student.id));
+      toast.success(`${student.fullName} unenrolled`);
+    } catch (error) {
+      toast.error('Could not unenroll the student', errorMessage(error));
+    }
+  };
+
   // Quiz Timer Countdown effect
   useEffect(() => {
     if (!activeQuizAttempt || quizTimerSeconds <= 0) return;
@@ -220,24 +253,38 @@ export const CourseDetailPage: React.FC = () => {
   const handleUploadResource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!courseId) return;
-
-    const newRes = await api.createResource(courseId, {
-      title: resourceTitle,
-      description: resourceDesc,
-      fileName: 'lecture_notes.pdf',
-      mimeType: 'application/pdf',
-      sizeBytes: 2500000
-    });
-
-    setResources([newRes, ...resources]);
-    setResourceModalOpen(false);
-    setResourceTitle('');
-    setResourceDesc('');
+    if (!resourceFile) {
+      toast.error('Choose a file to upload');
+      return;
+    }
+    if (resourceFile.size > 25 * 1024 * 1024) {
+      toast.error('File is too large', 'The limit is 25 MB.');
+      return;
+    }
+    setSavingResource(true);
+    try {
+      const newRes = await api.createResource(courseId, { title: resourceTitle.trim(), description: resourceDesc.trim(), file: resourceFile });
+      setResources([newRes, ...resources]);
+      setResourceModalOpen(false);
+      setResourceTitle('');
+      setResourceDesc('');
+      setResourceFile(null);
+      toast.success('Resource uploaded', newRes.title + ' is available to enrolled students.');
+    } catch (error) {
+      // Keep the dialog open so the title and file do not have to be chosen again.
+      toast.error('Upload failed', errorMessage(error));
+    } finally {
+      setSavingResource(false);
+    }
   };
 
   const handleDownloadResource = async (resId: string) => {
-    const { downloadUrl } = await api.getResourceDownloadUrl(resId);
-    window.open(downloadUrl, '_blank');
+    try {
+      const { downloadUrl } = await api.getResourceDownloadUrl(resId);
+      window.open(downloadUrl, '_blank', 'noopener');
+    } catch (error) {
+      toast.error('Download failed', errorMessage(error));
+    }
   };
 
   const handleDeleteResource = async (resId: string) => {
@@ -260,6 +307,7 @@ export const CourseDetailPage: React.FC = () => {
       toast.error('Maximum marks must be greater than zero');
       return;
     }
+    setSavingAssignment(true);
     try {
       const newAssign = await api.createAssignment(courseId, {
         title: assignTitle,
@@ -272,10 +320,15 @@ export const CourseDetailPage: React.FC = () => {
       setAssignModalOpen(false);
       setAssignTitle('');
       setAssignInst('');
+      setAssignDueDate('');
+      setAssignMarks(100);
+      setAssignAllowLate(false);
       toast.success('Assignment published', newAssign.title + ' is now visible to enrolled students.');
     } catch (error) {
       // Keep the form open with the teacher's input intact so nothing has to be retyped.
       toast.error('Assignment was not saved', errorMessage(error));
+    } finally {
+      setSavingAssignment(false);
     }
   };
 
@@ -340,17 +393,27 @@ export const CourseDetailPage: React.FC = () => {
 
   // Handlers for Quizzes
   const handleStartQuiz = async (quiz: Quiz) => {
-    const attempt = await api.startQuizAttempt(quiz.id);
-    setActiveQuizAttempt({ quiz, ...attempt });
-    setQuizTimerSeconds(attempt.expiresAt ? Math.max(1, Math.round((Date.parse(attempt.expiresAt) - Date.now()) / 1000)) : attempt.timeLimitMinutes * 60);
-    setQuizAnswers({});
-    setQuizResultScore(null);
+    try {
+      const attempt = await api.startQuizAttempt(quiz.id);
+      setActiveQuizAttempt({ quiz, ...attempt });
+      setQuizTimerSeconds(attempt.expiresAt ? Math.max(1, Math.round((Date.parse(attempt.expiresAt) - Date.now()) / 1000)) : attempt.timeLimitMinutes * 60);
+      setQuizAnswers({});
+      setQuizResultScore(null);
+      setQuizResultTotal(null);
+    } catch (error) {
+      toast.error('Could not start the quiz', errorMessage(error));
+    }
   };
 
   const handleQuizAutoSubmit = async () => {
     if (!activeQuizAttempt) return;
-    const res = await api.submitQuizAttempt(activeQuizAttempt.quiz.id, quizAnswers);
-    setQuizResultScore(res.score);
+    try {
+      const res = await api.submitQuizAttempt(activeQuizAttempt.quiz.id, quizAnswers);
+      setQuizResultScore(res.score);
+      setQuizResultTotal(res.totalMarks ?? null);
+    } catch (error) {
+      toast.error('Your quiz could not be submitted', errorMessage(error) + ' Try submitting again.');
+    }
   };
 
   // Handlers for Chat
@@ -358,9 +421,14 @@ export const CourseDetailPage: React.FC = () => {
     e.preventDefault();
     if (!courseId || !chatInput.trim()) return;
 
-    const sent = await api.sendChatMessage(courseId, chatInput.trim());
-    setChatMessages([...chatMessages, sent]);
-    setChatInput('');
+    try {
+      const sent = await api.sendChatMessage(courseId, chatInput.trim());
+      setChatMessages(current => [...current, sent]);
+      setChatInput('');
+    } catch (error) {
+      // The text stays in the box so it can be sent again.
+      toast.error('Message not sent', errorMessage(error));
+    }
   };
 
   // Handlers for Bulk Enrollment
@@ -368,8 +436,18 @@ export const CourseDetailPage: React.FC = () => {
     e.preventDefault();
     if (!courseId) return;
 
-    const res = await api.enrollStudents(courseId, undefined, csvInput);
-    setCsvResult(res);
+    if (!csvInput.trim()) {
+      toast.error('Paste at least one email address');
+      return;
+    }
+    try {
+      const res = await api.enrollStudents(courseId, undefined, csvInput);
+      setCsvResult(res);
+      setRosterReload(key => key + 1);
+      toast.success('Enrolment processed', `${res.matched?.length ?? 0} enrolled, ${res.duplicates?.length ?? 0} already enrolled, ${res.unknown?.length ?? 0} unknown.`);
+    } catch (error) {
+      toast.error('Enrolment failed', errorMessage(error));
+    }
   };
 
   if (courseError) {
@@ -889,33 +967,48 @@ export const CourseDetailPage: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-2">
-            {[
-              { id: '1', name: 'Ayesha Siddiqui', email: 'ayesha.siddiqui@gutech.edu.pk', roll: 'GUT-2023-0101' },
-              { id: '2', name: 'Ayesha Siddiqui', email: 'ayesha.s2@gutech.edu.pk', roll: 'GUT-2023-0189' },
-              { id: '3', name: 'Usman Ghani', email: 'usman.ghani@gutech.edu.pk', roll: 'GUT-2023-0205' },
-              { id: '4', name: 'Hira Malik', email: 'hira.malik@gutech.edu.pk', roll: 'GUT-2023-0311' }
-            ].map(st => (
-              <div key={st.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
+          {rosterLoading ? (
+            <div className="space-y-2" role="status" aria-live="polite"><span className="sr-only">Loading the class roster…</span>{[0, 1, 2].map(i => <div key={i} className="skeleton h-14 rounded-xl" />)}</div>
+          ) : rosterError ? (
+            <LoadError title="The roster could not be loaded" message={rosterError} onRetry={() => setRosterReload(key => key + 1)} />
+          ) : roster.length === 0 ? (
+            <EmptyState icon={<Users className="h-6 w-6" />} title="No students enrolled yet" description={role === 'admin' ? 'Use Bulk CSV Enroll to add students by email address.' : 'The administration enrols students into your class.'} />
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs font-semibold text-slate-500">{roster.length} student{roster.length === 1 ? '' : 's'} enrolled</p>
                 <div>
-                  <p className="text-xs font-bold text-navy-900">{st.name}</p>
-                  <p className="text-[11px] text-slate-500">{st.email} · <span className="font-mono text-gold-600 font-bold">{st.roll}</span></p>
+                  <label htmlFor="roster-search" className="sr-only">Search the roster</label>
+                  <input id="roster-search" type="search" value={rosterSearch} onChange={e => setRosterSearch(e.target.value)} placeholder="Search by name, email or roll number…" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs focus:border-navy-600 focus:outline-none sm:w-72" />
                 </div>
-                {role === 'admin' && (
-                  <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50">
-                    Unenroll
-                  </Button>
-                )}
               </div>
-            ))}
-          </div>
+              <div className="space-y-2">
+                {roster.filter(st => !rosterSearch.trim() || `${st.fullName} ${st.email} ${st.rollNo || ''}`.toLowerCase().includes(rosterSearch.trim().toLowerCase())).map(st => (
+                  <div key={st.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-navy-900">{st.fullName}{!st.isActive && <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">Deactivated</span>}</p>
+                      <p className="truncate text-[11px] text-slate-500">{st.email} · <span className="font-mono font-bold text-gold-600">{st.rollNo || '—'}</span></p>
+                    </div>
+                    {role === 'admin' && (
+                      <Button size="sm" variant="ghost" className="shrink-0 text-rose-600 hover:bg-rose-50" aria-label={`Unenroll ${st.fullName}`} onClick={() => handleUnenroll(st)}>
+                        Unenroll
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </Card>
       )}
 
       {/* QUIZ RUNNER MODAL */}
       <Modal
         isOpen={!!activeQuizAttempt}
-        onClose={() => setActiveQuizAttempt(null)}
+        onClose={() => {
+          if (quizResultScore === null && !window.confirm('Leave this quiz? Your timer keeps running. You can reopen it from the Quizzes tab until time runs out, but your selected answers are not saved.')) return;
+          setActiveQuizAttempt(null);
+        }}
         title={activeQuizAttempt?.quiz?.title || 'Timed Quiz'}
         maxWidth="xl"
       >
@@ -928,7 +1021,7 @@ export const CourseDetailPage: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-extrabold text-navy-900">Quiz Submitted & Auto-Graded!</h3>
                 <p className="text-sm font-semibold text-slate-600">
-                  Your Score: <span className="text-emerald-600 text-lg font-bold">{quizResultScore} Points</span>
+                  Your Score: <span className="text-emerald-600 text-lg font-bold">{quizResultScore}{quizResultTotal !== null ? ` / ${quizResultTotal}` : ''} Points</span>
                 </p>
                 <Button variant="primary" onClick={() => setActiveQuizAttempt(null)}>
                   Close Review
@@ -952,6 +1045,7 @@ export const CourseDetailPage: React.FC = () => {
                       <p className="text-xs font-extrabold text-navy-900 mb-2">
                         Question {idx + 1} ({q.marks} pts): {q.prompt}
                       </p>
+                      {q.type === 'mcq_multi' && <p className="mb-2 text-[11px] font-semibold text-amber-700">Select all that apply</p>}
                       <div className="space-y-2">
                         {q.options?.map((opt: any) => {
                           const selected = quizAnswers[q.id]?.includes(opt.id);
@@ -959,10 +1053,14 @@ export const CourseDetailPage: React.FC = () => {
                             <button
                               key={opt.id}
                               type="button"
+                              aria-pressed={Boolean(selected)}
                               onClick={() => {
-                                setQuizAnswers({
-                                  ...quizAnswers,
-                                  [q.id]: [opt.id]
+                                setQuizAnswers(current => {
+                                  const chosen = current[q.id] || [];
+                                  if (q.type === 'mcq_multi') {
+                                    return { ...current, [q.id]: chosen.includes(opt.id) ? chosen.filter(id => id !== opt.id) : [...chosen, opt.id] };
+                                  }
+                                  return { ...current, [q.id]: [opt.id] };
                                 });
                               }}
                               className={`w-full text-left p-3 rounded-xl text-xs font-medium border transition-all ${
@@ -1013,6 +1111,55 @@ export const CourseDetailPage: React.FC = () => {
           <Button type="submit" variant="gold" className="w-full font-bold">
             Submit Assignment
           </Button>
+        </form>
+      </Modal>
+
+      {/* CREATE ASSIGNMENT MODAL */}
+      <Modal
+        isOpen={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        title="Create assignment"
+        subtitle="Enrolled students see it immediately and can submit until the due date"
+        maxWidth="lg"
+      >
+        <form onSubmit={handleCreateAssignment} className="space-y-4">
+          <Input label="Title" value={assignTitle} onChange={e => setAssignTitle(e.target.value)} placeholder="e.g. Assignment 3: Database design" minLength={3} required />
+          <Textarea label="Instructions" value={assignInst} onChange={e => setAssignInst(e.target.value)} placeholder="What should students submit, and how will it be marked?" minLength={5} required />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Maximum marks" type="number" min={1} step="0.5" value={assignMarks} onChange={e => setAssignMarks(Number(e.target.value))} required />
+            <Input label="Due date and time" type="datetime-local" value={assignDueDate} onChange={e => setAssignDueDate(e.target.value)} min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} helperText="Leave empty for one week from now" />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+            <input type="checkbox" checked={assignAllowLate} onChange={e => setAssignAllowLate(e.target.checked)} />
+            Accept late submissions (they are marked late)
+          </label>
+          <Button type="submit" variant="gold" className="w-full font-bold" isLoading={savingAssignment}>Publish assignment</Button>
+        </form>
+      </Modal>
+
+      {/* UPLOAD RESOURCE MODAL */}
+      <Modal
+        isOpen={resourceModalOpen}
+        onClose={() => setResourceModalOpen(false)}
+        title="Upload resource"
+        subtitle="PDF, Word, PowerPoint, images or ZIP, up to 25 MB"
+      >
+        <form onSubmit={handleUploadResource} className="space-y-4">
+          <Input label="Title" value={resourceTitle} onChange={e => setResourceTitle(e.target.value)} placeholder="e.g. Week 5 lecture slides" minLength={2} required />
+          <Textarea label="Description (optional)" value={resourceDesc} onChange={e => setResourceDesc(e.target.value)} placeholder="What is in this file?" />
+          <div>
+            <label htmlFor="resource-file" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700">File</label>
+            <input
+              id="resource-file"
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.zip"
+              onChange={e => setResourceFile(e.target.files?.[0] ?? null)}
+              className="block w-full rounded-xl border border-slate-200 bg-white text-xs file:mr-3 file:rounded-l-xl file:border-0 file:bg-navy-900 file:px-4 file:py-2.5 file:text-xs file:font-bold file:text-white"
+              required
+            />
+            {resourceFile && <p className="mt-1 text-xs text-slate-500">{resourceFile.name} · {formatBytes(resourceFile.size)}</p>}
+          </div>
+          <Button type="submit" variant="gold" className="w-full font-bold" isLoading={savingResource}>Upload</Button>
         </form>
       </Modal>
 

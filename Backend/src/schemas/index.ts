@@ -17,6 +17,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required')
 });
 
+export const updateMeSchema = z.object({
+  fullName: z.string().trim().min(2, 'Full name must have at least 2 characters').max(80, 'Full name is too long')
+});
+
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Please enter a valid email address')
 });

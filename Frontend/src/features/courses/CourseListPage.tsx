@@ -16,12 +16,13 @@ import {
 } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, EmptyState } from '../../components/ui/index.js';
 import { LoadError } from '../../components/ui/index.js';
-import { errorMessage } from '../../components/ui/Toast.js';
+import { errorMessage, useToast } from '../../components/ui/Toast.js';
 import { Course } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 
 export const CourseListPage: React.FC = () => {
   const { role } = useAuth();
+  const toast = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -66,6 +67,7 @@ export const CourseListPage: React.FC = () => {
       setCode('');
       setTitle('');
       setDescription('');
+      toast.success('Course created', 'Assign a teacher and enrol students from the course page.');
     } catch (err: unknown) {
       setModalError((err as Error)?.message || 'Failed to create course');
     } finally {
@@ -79,6 +81,7 @@ export const CourseListPage: React.FC = () => {
     try {
       await api.deleteCourseAdmin(course.id);
       setCourses(current => current.filter(item => item.id !== course.id));
+      toast.success(`${course.code} deleted`);
     } catch (err) {
       setActionError((err as Error)?.message || 'Could not delete this course.');
     }
@@ -138,8 +141,8 @@ export const CourseListPage: React.FC = () => {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="w-6 h-6" />}
-          title="No courses matched your query"
-          description="Check your spelling or reset the search filter to display all classes."
+          title={courses.length === 0 ? (role === 'student' ? 'You are not enrolled in any courses yet' : role === 'teacher' ? 'No classes are assigned to you yet' : 'There are no courses yet') : 'No courses matched your query'}
+          description={courses.length === 0 ? (role === 'student' ? 'Ask the administration to enrol you. Your classes will appear here.' : role === 'teacher' ? 'The administration assigns classes to teachers.' : 'Use Add New Course to create the first one.') : 'Check your spelling or reset the search filter to display all classes.'}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -3,9 +3,10 @@
 // ==============================================================================
 
 import { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin, supabaseAnon, isSupabaseConfigured } from '../config/index.js';
+import { supabaseAdmin, supabaseAnon, isSupabaseConfigured, config } from '../config/index.js';
 import { mockDb } from '../repositories/mockDb.js';
-import { badRequest, unauthorized, forbidden } from '../utils/errors.js';
+import { badRequest, unauthorized, forbidden, unprocessable } from '../utils/errors.js';
+import { recordAudit } from '../utils/audit.js';
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -146,9 +147,17 @@ export const getMe = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-export const forgotPassword = async (_req: Request, res: Response, next: NextFunction) => {
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Rule: always return 200 with identical neutral message
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (isSupabaseConfigured() && email) {
+      // Fire and forget: the answer must be identical whether or not the account exists.
+      try {
+        await supabaseAnon.auth.resetPasswordForEmail(email, { redirectTo: config.passwordResetRedirect });
+      } catch (error) {
+        console.warn('[auth] reset email could not be requested:', (error as Error).message);
+      }
+    }
     return res.status(200).json({
       data: {
         message: 'If an account exists with this email address, a password reset link has been dispatched.'
@@ -159,13 +168,19 @@ export const forgotPassword = async (_req: Request, res: Response, next: NextFun
   }
 };
 
-export const resetPassword = async (_req: Request, res: Response, next: NextFunction) => {
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    return res.status(200).json({
-      data: {
-        message: 'Password has been successfully updated. You may now log in.'
-      }
-    });
+    const { token, newPassword } = req.body;
+    if (!isSupabaseConfigured()) {
+      return next(unprocessable('Password reset links are only available on the live portal.'));
+    }
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data.user) return next(unprocessable('This reset link is invalid or has expired. Request a new one.'));
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, { password: newPassword });
+    if (updateError) throw updateError;
+    await supabaseAdmin.from('profiles').update({ must_change_password: false, updated_at: new Date().toISOString() }).eq('id', data.user.id);
+    await recordAudit({ actorId: data.user.id, action: 'user.reset-password', entity: 'profile', entityId: data.user.id, live: true, metadata: { email: data.user.email, via: 'email-link' } });
+    return res.status(200).json({ data: { message: 'Password has been successfully updated. You may now log in.' } });
   } catch (err) {
     next(err);
   }
@@ -173,15 +188,58 @@ export const resetPassword = async (_req: Request, res: Response, next: NextFunc
 
 export const changePassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) {
-      return next(unauthorized());
+    const user = req.user;
+    if (!user) return next(unauthorized());
+    const { currentPassword, newPassword } = req.body;
+
+    if (currentPassword === newPassword) {
+      return next(unprocessable('Choose a new password that is different from your current one.'));
     }
 
-    return res.status(200).json({
-      data: {
-        message: 'Your password has been changed successfully.'
-      }
-    });
+    const live = Boolean(isSupabaseConfigured()) && user.isDemoUser !== true;
+    if (live) {
+      // Prove the caller knows the current password before changing anything.
+      const { data, error } = await supabaseAnon.auth.signInWithPassword({ email: user.email, password: currentPassword });
+      if (error || !data.user || data.user.id !== user.id) return next(unprocessable('Your current password is incorrect.'));
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, { password: newPassword });
+      if (updateError) throw updateError;
+      await supabaseAdmin.from('profiles').update({ must_change_password: false, updated_at: new Date().toISOString() }).eq('id', user.id);
+    } else {
+      const credential = mockDb.credentials.find(item => item.email.toLowerCase() === user.email.toLowerCase());
+      if (!credential || credential.password !== currentPassword) return next(unprocessable('Your current password is incorrect.'));
+      credential.password = newPassword;
+      const profile = mockDb.profiles.find(item => item.id === user.id);
+      if (profile) profile.mustChangePassword = false;
+    }
+
+    await recordAudit({ actorId: user.id, action: 'user.change-password', entity: 'profile', entityId: user.id, live, metadata: { email: user.email } });
+    return res.status(200).json({ data: { message: 'Your password has been changed successfully.' } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateMe = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user;
+    if (!user) return next(unauthorized());
+    const fullName = String(req.body.fullName).trim().replace(/\s+/g, ' ');
+    const live = Boolean(isSupabaseConfigured()) && user.isDemoUser !== true;
+
+    if (live) {
+      const { data, error } = await supabaseAdmin.from('profiles').update({ full_name: fullName, updated_at: new Date().toISOString() }).eq('id', user.id).select().single();
+      if (error) throw error;
+      await supabaseAdmin.auth.admin.updateUserById(user.id, { user_metadata: { full_name: fullName, role: data.role } });
+      await recordAudit({ actorId: user.id, action: 'user.update', entity: 'profile', entityId: user.id, live, metadata: { email: user.email, changes: ['full_name'] } });
+      return res.status(200).json({ data: { id: data.id, fullName: data.full_name, email: data.email, role: data.role, rollNo: data.roll_no, avatarUrl: data.avatar_url, isActive: data.is_active, mustChangePassword: data.must_change_password, createdAt: data.created_at, updatedAt: data.updated_at } });
+    }
+
+    const profile = mockDb.profiles.find(item => item.id === user.id);
+    if (!profile) return next(unauthorized('Profile not found'));
+    profile.fullName = fullName;
+    profile.updatedAt = new Date().toISOString();
+    await recordAudit({ actorId: user.id, action: 'user.update', entity: 'profile', entityId: user.id, live, metadata: { email: user.email, changes: ['full_name'] } });
+    return res.status(200).json({ data: profile });
   } catch (err) {
     next(err);
   }
