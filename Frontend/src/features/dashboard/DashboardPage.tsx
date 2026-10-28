@@ -17,10 +17,11 @@ import {
   Plus,
   LifeBuoy,
   Sparkles,
-  FileText
+  FileText,
+  ClipboardCheck
 } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/ui/index.js';
-import { Course, Announcement, PendingTask } from '../../types/index.js';
+import { Course, Announcement, PendingTask, GradingQueue } from '../../types/index.js';
 import { API_BASE_URL, api } from '../../lib/api.js';
 import { formatDateTime, formatRelativeTime } from '../../lib/utils.js';
 
@@ -31,9 +32,23 @@ type DashboardSnapshot = {
   pendingTasks: PendingTask[];
   studentAverage: number | null;
   adminStats: { users: number | null; grievances: number | null; connected: boolean };
+  gradingQueue: GradingQueue | null;
 };
 
 const dashboardCache = new Map<string, DashboardSnapshot>();
+
+/** A KPI tile; when `to` is set the whole tile is a link so every number leads somewhere useful. */
+const StatTile: React.FC<{ to?: string; label: string; children: React.ReactNode }> = ({ to, label, children }) => {
+  if (!to) return <Card className="flex items-center gap-4">{children}</Card>;
+  return (
+    <Link to={to} aria-label={label} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2">
+      <Card className="flex h-full items-center gap-4">
+        {children}
+        <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+      </Card>
+    </Link>
+  );
+};
 
 export const DashboardPage: React.FC = () => {
   const { user, role } = useAuth();
@@ -43,6 +58,7 @@ export const DashboardPage: React.FC = () => {
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
   const [studentAverage, setStudentAverage] = useState<number | null>(null);
   const [adminStats, setAdminStats] = useState<{ users: number | null; grievances: number | null; connected: boolean }>({ users: null, grievances: null, connected: false });
+  const [gradingQueue, setGradingQueue] = useState<GradingQueue | null>(null);
   const [loading, setLoading] = useState(true);
   const dashboardCacheKey = `${user?.id || ''}:${role || ''}`;
 
@@ -56,18 +72,20 @@ export const DashboardPage: React.FC = () => {
       setPendingTasks(cached.pendingTasks);
       setStudentAverage(cached.studentAverage);
       setAdminStats(cached.adminStats);
+      setGradingQueue(cached.gradingQueue);
       setLoading(false);
     } else {
       setLoading(true);
     }
 
     const loadDashboardData = async () => {
-      const [courseResult, announcementResult, taskResult, marksResult, adminResult] = await Promise.allSettled([
+      const [courseResult, announcementResult, taskResult, marksResult, adminResult, queueResult] = await Promise.allSettled([
         role === 'admin' ? api.getAllCoursesAdmin() : api.getMyCourses(),
         api.getAnnouncements(),
         role === 'student' ? api.getPendingTasks() : Promise.resolve([]),
         role === 'student' ? api.getStudentMarks() : Promise.resolve(null),
-        role === 'admin' ? Promise.allSettled([api.getUsersAdmin(), api.getAdminComplaints('open'), fetch(`${API_BASE_URL}/health`).then(response => response.ok)]) : Promise.resolve(null)
+        role === 'admin' ? Promise.allSettled([api.getUsersAdmin(), api.getAdminComplaints('open'), fetch(`${API_BASE_URL}/health`).then(response => response.ok)]) : Promise.resolve(null),
+        role === 'teacher' ? api.getGradingQueue() : Promise.resolve(null)
       ]);
       if (!isCurrent) return;
       const nextCourses = courseResult.status === 'fulfilled' ? courseResult.value : [];
@@ -79,7 +97,7 @@ export const DashboardPage: React.FC = () => {
         const [usersResult, grievancesResult, health] = adminResult.value;
         nextAdminStats = { users: usersResult.status === 'fulfilled' ? usersResult.value.length : null, grievances: grievancesResult.status === 'fulfilled' ? grievancesResult.value.length : null, connected: health.status === 'fulfilled' && health.value };
       }
-      const snapshot: DashboardSnapshot = { courses: nextCourses, announcements: announcementList.slice(0, 4), announcementCount: announcementList.length, pendingTasks: nextTasks, studentAverage: nextAverage, adminStats: nextAdminStats };
+      const snapshot: DashboardSnapshot = { courses: nextCourses, announcements: announcementList.slice(0, 4), announcementCount: announcementList.length, pendingTasks: nextTasks, studentAverage: nextAverage, adminStats: nextAdminStats, gradingQueue: queueResult.status === 'fulfilled' ? queueResult.value : null };
       dashboardCache.set(dashboardCacheKey, snapshot);
       setCourses(snapshot.courses);
       setAnnouncements(snapshot.announcements);
@@ -87,6 +105,7 @@ export const DashboardPage: React.FC = () => {
       setPendingTasks(snapshot.pendingTasks);
       setStudentAverage(snapshot.studentAverage);
       setAdminStats(snapshot.adminStats);
+      setGradingQueue(snapshot.gradingQueue);
       setLoading(false);
     };
 
@@ -118,7 +137,7 @@ export const DashboardPage: React.FC = () => {
 
           <div className="flex items-center gap-2">
             {role === 'admin' ? (
-              <Link to="/courses">
+              <Link to="/courses?new=1">
                 <Button variant="gold" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
                   Create Course
                 </Button>
@@ -140,131 +159,64 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Stats Strip */}
+      {/* KPI Stats Strip: every tile leads to the place where that number can be acted on */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {role === 'student' ? (
           <>
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center font-bold">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Enrolled Courses</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p>
-              </div>
-            </Card>
-
-            <Link to="/tasks" aria-label={`View ${pendingTasks.length} pending assignments`} className="block rounded-2xl transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2">
-              <Card className="flex items-center gap-4 transition-[border-color,box-shadow] hover:border-amber-300 hover:shadow-md">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold"><Clock className="w-6 h-6" aria-hidden="true" /></div>
-                <div><p className="text-xs font-semibold text-slate-400">Pending Tasks</p><p className="text-xl font-extrabold tabular-nums text-navy-950 mt-0.5">{loading ? '—' : pendingTasks.length}</p></div>
-                <ArrowRight className="ml-auto h-4 w-4 text-slate-400" aria-hidden="true" />
-              </Card>
-            </Link>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-                <Award className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Current Average</p>
-                <p className="text-xl font-extrabold text-emerald-600 mt-0.5">{loading ? '—' : studentAverage === null ? '—' : `${studentAverage}%`}</p>
-              </div>
-            </Card>
-
-            <Link to="/announcements" className="block rounded-2xl transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-2" aria-label={`View ${announcementCount} announcements`}><Card className="flex items-center gap-4 transition-[border-color,box-shadow] hover:border-purple-200 hover:shadow-md">
-              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold">
-                <Bell className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Announcements</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p>
-              </div>
-            </Card></Link>
+            <StatTile to="/courses" label={`Open your ${courses.length} enrolled courses`}>
+              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center font-bold"><BookOpen className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Enrolled Courses</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p></div>
+            </StatTile>
+            <StatTile to="/tasks" label={`View ${pendingTasks.length} pending assignments`}>
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold"><Clock className="w-6 h-6" aria-hidden="true" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Pending Tasks</p><p className="text-xl font-extrabold tabular-nums text-navy-950 mt-0.5">{loading ? '—' : pendingTasks.length}</p></div>
+            </StatTile>
+            <StatTile to="/marks" label="Open your marks and GPA">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold"><Award className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Current Average</p><p className="text-xl font-extrabold text-emerald-600 mt-0.5">{loading ? '—' : studentAverage === null ? '—' : `${studentAverage}%`}</p></div>
+            </StatTile>
+            <StatTile to="/announcements" label={`View ${announcementCount} announcements`}>
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center font-bold"><Bell className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Announcements</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p></div>
+            </StatTile>
           </>
         ) : role === 'teacher' ? (
           <>
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Assigned Classes</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
-                <FileText className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">To Grade</p>
-                <p className="text-xl font-extrabold text-amber-600 mt-0.5">See courses</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Total Students</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.reduce((count, course) => count + (course.studentsCount || 0), 0)}</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center">
-                <LifeBuoy className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Department Status</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p>
-              </div>
-            </Card>
+            <StatTile to="/courses" label={`Open your ${courses.length} assigned classes`}>
+              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center"><BookOpen className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Assigned Classes</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.length}</p></div>
+            </StatTile>
+            <StatTile to="/grading" label={`Open the grading queue: ${gradingQueue?.summary.ungradedTotal ?? 0} submissions to grade`}>
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center"><FileText className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">To Grade</p><p className="text-xl font-extrabold tabular-nums text-amber-600 mt-0.5">{loading ? '—' : gradingQueue ? gradingQueue.summary.ungradedTotal : '—'}</p></div>
+            </StatTile>
+            <StatTile to="/courses" label="Open your classes to see enrolled students">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><Users className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Total Students</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.reduce((count, course) => count + (course.studentsCount || 0), 0)}</p></div>
+            </StatTile>
+            <StatTile to="/announcements" label={`View ${announcementCount} announcements`}>
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center"><Bell className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Announcements</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : announcementCount}</p></div>
+            </StatTile>
           </>
         ) : (
           <>
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center">
-                <Users className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Active Accounts</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{adminStats.users ?? '—'} Users</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gold-50 text-gold-700 flex items-center justify-center">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Total Courses</p>
-                <p className="text-xl font-extrabold text-navy-950 mt-0.5">{courses.filter(course => !course.isArchived).length} Active</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center">
-                <LifeBuoy className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">Open Grievances</p>
-                <p className="text-xl font-extrabold text-rose-600 mt-0.5">{adminStats.grievances ?? '—'} Tickets</p>
-              </div>
-            </Card>
-
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-400">System Health</p>
-                <p className={`text-xl font-extrabold mt-0.5 ${adminStats.connected ? 'text-emerald-600' : 'text-amber-600'}`}>{adminStats.connected ? 'Connected' : 'Unavailable'}</p>
-              </div>
-            </Card>
+            <StatTile to="/admin/users" label="Open the user directory">
+              <div className="w-12 h-12 rounded-2xl bg-navy-50 text-navy-800 flex items-center justify-center"><Users className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Active Accounts</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{adminStats.users ?? '—'} Users</p></div>
+            </StatTile>
+            <StatTile to="/courses" label="Manage courses">
+              <div className="w-12 h-12 rounded-2xl bg-gold-50 text-gold-700 flex items-center justify-center"><BookOpen className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Total Courses</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{courses.filter(course => !course.isArchived).length} Active</p></div>
+            </StatTile>
+            <StatTile to="/complaints" label="Review open grievances">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center"><LifeBuoy className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">Open Grievances</p><p className="text-xl font-extrabold text-rose-600 mt-0.5">{adminStats.grievances ?? '—'} Tickets</p></div>
+            </StatTile>
+            <StatTile label="System health">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><CheckCircle2 className="w-6 h-6" /></div>
+              <div><p className="text-xs font-semibold text-slate-400">System Health</p><p className={`text-xl font-extrabold mt-0.5 ${adminStats.connected ? 'text-emerald-600' : 'text-amber-600'}`}>{adminStats.connected ? 'Connected' : 'Unavailable'}</p></div>
+            </StatTile>
           </>
         )}
       </div>
@@ -283,6 +235,11 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {!loading && courses.length === 0 && (
+              <p className="sm:col-span-2 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 p-6 text-center text-sm text-slate-500">
+                {role === 'student' ? 'You are not enrolled in any courses yet. Ask the administration to enrol you.' : role === 'teacher' ? 'No classes are assigned to you yet.' : 'There are no courses yet. Create the first one from Manage Courses.'}
+              </p>
+            )}
             {courses.map(course => (
               <Card key={course.id} className="hover:border-navy-300 hover:shadow-premium-lg transition-all flex flex-col justify-between">
                 <div>
@@ -301,11 +258,11 @@ export const DashboardPage: React.FC = () => {
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
                     <Users className="w-3.5 h-3.5" />
-                    <span>{course.studentsCount || 4} students</span>
+                    <span>{typeof course.studentsCount === 'number' ? `${course.studentsCount} students` : 'Open to view'}</span>
                   </div>
                   <Link to={`/courses/${course.id}`}>
                     <Button size="sm" variant="outline" className="font-semibold text-xs">
-                      Enter Class
+                      {role === 'teacher' ? 'Open Class' : 'Enter Class'}
                     </Button>
                   </Link>
                 </div>
@@ -321,12 +278,13 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-amber-600" />
-                <h3 className="text-xs font-bold text-navy-950 uppercase tracking-wider">{role === 'student' ? 'Pending Work' : 'Get Started'}</h3>
+                <h3 className="text-xs font-bold text-navy-950 uppercase tracking-wider">{role === 'student' ? 'Pending Work' : role === 'teacher' ? 'Needs Grading' : 'Get Started'}</h3>
               </div>
               {role === 'student' && <Link to="/tasks" className="text-[11px] font-bold text-navy-700 hover:text-navy-950">View all</Link>}
+              {role === 'teacher' && <Link to="/grading" className="text-[11px] font-bold text-navy-700 hover:text-navy-950">View all</Link>}
             </div>
 
-            {role === 'student' ? loading ? <div className="space-y-2" role="status" aria-live="polite"><span className="sr-only">Loading pending assignments…</span><div className="h-16 animate-pulse rounded-xl bg-slate-100" /><div className="h-16 animate-pulse rounded-xl bg-slate-100" /></div> : pendingTasks.length ? <div className="space-y-2">{pendingTasks.slice(0, 3).map(task => <Link key={task.id} to={`/courses/${task.courseId}?tab=assignments&assignmentId=${task.id}`} className="group block rounded-xl border border-slate-200/70 bg-slate-50 p-3 transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"><div className="flex items-start justify-between gap-2"><span className="min-w-0 text-xs font-bold text-navy-900 group-hover:text-navy-700">{task.title}</span><Badge variant={task.isOverdue ? 'danger' : 'warning'} size="sm">{task.isOverdue ? 'Overdue' : 'Pending'}</Badge></div><p className="mt-1 text-[11px] text-slate-500">{task.courseCode} · Due {formatDateTime(task.dueAt)}</p></Link>)}</div> : <p className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">You’re all caught up. No assignments are waiting for submission.</p> : <div className="space-y-3"><p className="text-sm text-slate-600">Open a class to review assignments, resources, and announcements.</p><Link to="/courses" className="inline-flex items-center gap-2 text-sm font-bold text-navy-800 hover:text-navy-600">Browse classes <ArrowRight className="h-4 w-4" /></Link></div>}
+            {role === 'teacher' ? loading ? <div className="space-y-2" role="status" aria-live="polite"><span className="sr-only">Loading your grading queue…</span><div className="skeleton h-16 rounded-xl" /><div className="skeleton h-16 rounded-xl" /></div> : gradingQueue && gradingQueue.items.length ? <div className="space-y-2">{gradingQueue.items.slice(0, 4).map(item => <Link key={item.assignmentId} to={`/courses/${item.courseId}?tab=assignments&assignmentId=${item.assignmentId}&grade=1`} className="group block rounded-xl border border-slate-200/70 bg-slate-50 p-3 transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"><div className="flex items-start justify-between gap-2"><span className="min-w-0 text-xs font-bold text-navy-900 group-hover:text-navy-700">{item.title}</span><Badge variant="warning" size="sm">{item.ungradedCount} to grade</Badge></div><p className="mt-1 text-[11px] text-slate-500">{item.courseCode} · {item.gradedCount + item.ungradedCount} submitted</p></Link>)}{gradingQueue.items.length > 4 && <Link to="/grading" className="block text-center text-[11px] font-bold text-navy-700 hover:text-navy-950">+{gradingQueue.items.length - 4} more assignments</Link>}</div> : <p className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">You're all caught up. No submissions are waiting for marks.</p> : role === 'student' ? loading ? <div className="space-y-2" role="status" aria-live="polite"><span className="sr-only">Loading pending assignments…</span><div className="h-16 animate-pulse rounded-xl bg-slate-100" /><div className="h-16 animate-pulse rounded-xl bg-slate-100" /></div> : pendingTasks.length ? <div className="space-y-2">{pendingTasks.slice(0, 3).map(task => <Link key={task.id} to={`/courses/${task.courseId}?tab=assignments&assignmentId=${task.id}`} className="group block rounded-xl border border-slate-200/70 bg-slate-50 p-3 transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"><div className="flex items-start justify-between gap-2"><span className="min-w-0 text-xs font-bold text-navy-900 group-hover:text-navy-700">{task.title}</span><Badge variant={task.isOverdue ? 'danger' : 'warning'} size="sm">{task.isOverdue ? 'Overdue' : 'Pending'}</Badge></div><p className="mt-1 text-[11px] text-slate-500">{task.courseCode} · Due {formatDateTime(task.dueAt)}</p></Link>)}</div> : <p className="rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">You’re all caught up. No assignments are waiting for submission.</p> : <div className="space-y-3"><p className="text-sm text-slate-600">Open a class to review assignments, resources, and announcements.</p><Link to="/courses" className="inline-flex items-center gap-2 text-sm font-bold text-navy-800 hover:text-navy-600">Browse classes <ArrowRight className="h-4 w-4" /></Link></div>}
           </Card>
 
           {/* Announcements Feed */}

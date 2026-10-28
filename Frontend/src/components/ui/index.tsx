@@ -324,3 +324,14 @@ export const EmptyState: React.FC<{
     </div>
   );
 };
+
+// ------------------------------------------------------------------------------
+// LOAD ERROR (replaces made-up fallback data when the server cannot be reached)
+// ------------------------------------------------------------------------------
+export const LoadError: React.FC<{ title: string; message?: string; onRetry?: () => void }> = ({ title, message, onRetry }) => (
+  <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50/60 p-6 text-center">
+    <p className="text-base font-bold text-rose-900">{title}</p>
+    <p className="mx-auto mt-1 max-w-md text-sm text-rose-800">{message || 'Check your connection and try again.'}</p>
+    {onRetry && <Button className="mt-4" size="sm" onClick={onRetry}>Try again</Button>}
+  </div>
+);

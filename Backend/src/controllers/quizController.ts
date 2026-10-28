@@ -245,9 +245,15 @@ export const startQuizAttempt = async (req: Request, res: Response, next: NextFu
       const { data: enrollment, error: enrollmentError } = await supabaseAdmin.from('enrollments').select('course_id').eq('course_id', quiz.course_id).eq('student_id', user.id).maybeSingle();
       if (enrollmentError) throw enrollmentError;
       if (!enrollment) return next(forbidden('You are not enrolled in this course'));
-      const { data: existing, error: existingError } = await supabaseAdmin.from('quiz_attempts').select('id').eq('quiz_id', id).eq('student_id', user.id).maybeSingle();
+      const { data: existing, error: existingError } = await supabaseAdmin.from('quiz_attempts').select('id,started_at,submitted_at').eq('quiz_id', id).eq('student_id', user.id).maybeSingle();
       if (existingError) throw existingError;
-      if (existing) return next(conflict('You have already taken this quiz. Only one attempt is permitted.'));
+      if (existing) {
+        const expiresMs = new Date(existing.started_at).getTime() + quiz.time_limit_minutes * 60000;
+        if (existing.submitted_at || Date.now() >= expiresMs) return next(conflict('You have already taken this quiz. Only one attempt is permitted.'));
+        const { data: resumeQuestions, error: resumeError } = await supabaseAdmin.from('quiz_questions').select('id,position,type,prompt,options,marks').eq('quiz_id', id).order('position');
+        if (resumeError) throw resumeError;
+        return res.status(200).json({ data: { attemptId: existing.id, startedAt: existing.started_at, expiresAt: new Date(expiresMs).toISOString(), timeLimitMinutes: quiz.time_limit_minutes, questions: resumeQuestions, resumed: true } });
+      }
       const now = new Date();
       if (!quiz.is_published || now < new Date(quiz.opens_at) || now > new Date(quiz.closes_at)) return next(conflict('Quiz is not currently open for attempts.'));
       const { data: attempt, error: attemptError } = await supabaseAdmin.from('quiz_attempts').insert({ quiz_id: id, student_id: user.id, answers: {}, score: null }).select().single();
@@ -268,7 +274,21 @@ export const startQuizAttempt = async (req: Request, res: Response, next: NextFu
     // Check 1 attempt rule
     const existing = mockDb.quizAttempts.find(qa => qa.quizId === id && qa.studentId === user.id);
     if (existing) {
-      return next(conflict('You have already taken this quiz. Only one attempt is permitted.'));
+      const expiresMs = new Date(existing.startedAt).getTime() + quiz.timeLimitMinutes * 60 * 1000;
+      if (existing.submittedAt || Date.now() >= expiresMs) {
+        return next(conflict('You have already taken this quiz. Only one attempt is permitted.'));
+      }
+      // Unfinished and still within the time limit (e.g. the page was refreshed): resume it.
+      return res.status(200).json({
+        data: {
+          attemptId: existing.id,
+          startedAt: existing.startedAt,
+          expiresAt: new Date(expiresMs).toISOString(),
+          timeLimitMinutes: quiz.timeLimitMinutes,
+          resumed: true,
+          questions: mockDb.quizQuestions.filter(qq => qq.quizId === id).map(qq => ({ id: qq.id, position: qq.position, type: qq.type, prompt: qq.prompt, options: qq.options, marks: qq.marks }))
+        }
+      });
     }
 
     const now = new Date();

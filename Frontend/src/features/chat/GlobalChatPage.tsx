@@ -18,6 +18,8 @@ import { Card, Button, Badge } from '../../components/ui/index.js';
 import { Course, ChatMessage } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 import { formatRelativeTime } from '../../lib/utils.js';
+import { LoadError } from '../../components/ui/index.js';
+import { useToast, errorMessage } from '../../components/ui/Toast.js';
 
 export const GlobalChatPage: React.FC = () => {
   const { user } = useAuth();
@@ -27,6 +29,10 @@ export const GlobalChatPage: React.FC = () => {
   const [inputBody, setInputBody] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -36,80 +42,31 @@ export const GlobalChatPage: React.FC = () => {
         if (list.length > 0) {
           setSelectedCourseId(list[0].id);
         }
-      } catch {
-        // Fallback
-        const fallback = [
-          {
-            id: 'c0000000-0000-0000-0000-000000000002',
-            code: 'WEB302',
-            title: 'Modern Web Technologies',
-            isArchived: false,
-            createdAt: '',
-            updatedAt: ''
-          },
-          {
-            id: 'c0000000-0000-0000-0000-000000000001',
-            code: 'CS101',
-            title: 'Introduction to Computer Science',
-            isArchived: false,
-            createdAt: '',
-            updatedAt: ''
-          }
-        ];
-        setCourses(fallback);
-        setSelectedCourseId(fallback[0].id);
+      } catch (error) {
+        setCoursesError(errorMessage(error, 'Your class channels could not be loaded.'));
       }
     };
 
+    setCoursesError(null);
     fetchCourses();
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (!selectedCourseId) return;
 
     const loadMessages = async () => {
+      setMessagesError(null);
       try {
         const msgs = await api.getChatMessages(selectedCourseId);
         setMessages(msgs);
-      } catch {
-        // Fallback seeded messages
-        setMessages([
-          {
-            id: 'msg-1',
-            courseId: selectedCourseId,
-            senderId: 't1',
-            senderName: 'Prof. Imran Hanif',
-            senderRole: 'teacher',
-            senderAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-            body: 'Hello everyone! Welcome to the class discussion channel. Please feel free to ask questions regarding lectures and assignments.',
-            createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
-          },
-          {
-            id: 'msg-2',
-            courseId: selectedCourseId,
-            senderId: 's1',
-            senderName: 'Ayesha Siddiqui',
-            senderRole: 'student',
-            senderAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-            body: 'Professor, will the quiz cover Chapter 3 material as well?',
-            createdAt: new Date(Date.now() - 3600000 * 2).toISOString()
-          },
-          {
-            id: 'msg-3',
-            courseId: selectedCourseId,
-            senderId: 't1',
-            senderName: 'Prof. Imran Hanif',
-            senderRole: 'teacher',
-            senderAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-            body: 'Yes, Chapters 1 through 3 are included. Focus on status codes and RLS policies.',
-            createdAt: new Date(Date.now() - 3600000 * 1).toISOString()
-          }
-        ]);
+      } catch (error) {
+        setMessages([]);
+        setMessagesError(errorMessage(error, 'Messages could not be loaded.'));
       }
     };
 
     loadMessages();
-  }, [selectedCourseId]);
+  }, [selectedCourseId, reloadKey]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -125,23 +82,18 @@ export const GlobalChatPage: React.FC = () => {
     try {
       const sent = await api.sendChatMessage(selectedCourseId, text);
       setMessages(prev => [...prev, sent]);
-    } catch {
-      // Optimistic client addition
-      const optimisticMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        courseId: selectedCourseId,
-        senderId: user?.id || 'me',
-        senderName: user?.fullName || 'Me',
-        senderRole: user?.role || 'student',
-        senderAvatar: user?.avatarUrl,
-        body: text,
-        createdAt: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, optimisticMsg]);
+    } catch (error) {
+      // The message was NOT delivered: put the text back and say so instead of pretending it was sent.
+      setInputBody(text);
+      toast.error('Message not sent', errorMessage(error));
     }
   };
 
   const selectedCourse = courses.find(c => c.id === selectedCourseId);
+
+  if (coursesError) {
+    return <LoadError title="Class channels could not be loaded" message={coursesError} onRetry={() => setReloadKey(key => key + 1)} />;
+  }
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto h-[calc(100vh-140px)] flex flex-col">
@@ -149,6 +101,8 @@ export const GlobalChatPage: React.FC = () => {
         <h1 className="text-2xl font-extrabold text-navy-950 tracking-tight">Classroom Group Channels</h1>
         <p className="text-xs text-slate-500 mt-0.5">Direct peer-to-peer and instructor course messaging</p>
       </div>
+
+      {messagesError && <LoadError title="Messages could not be loaded" message={messagesError} onRetry={() => setReloadKey(key => key + 1)} />}
 
       <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
         {/* Left: Channels List */}

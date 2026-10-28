@@ -15,7 +15,9 @@ import {
   Search
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Textarea, EmptyState } from '../../components/ui/index.js';
-import { Announcement } from '../../types/index.js';
+import { LoadError } from '../../components/ui/index.js';
+import { errorMessage, useToast } from '../../components/ui/Toast.js';
+import { Announcement, Course } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 import { formatDate, formatDateTime, formatRelativeTime } from '../../lib/utils.js';
 
@@ -26,48 +28,27 @@ export const AnnouncementsPage: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const toast = useToast();
+  const [myCourses, setMyCourses] = useState<Course[]>([]);
+  const [targetCourseId, setTargetCourseId] = useState('');
+  const [posting, setPosting] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [isPinned, setIsPinned] = useState(false);
-  const [targetType, setTargetType] = useState<'global' | 'course'>('global');
+  const [targetType, setTargetType] = useState<'global' | 'course'>(role === 'admin' ? 'global' : 'course');
 
   const fetchAnnouncements = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await api.getAnnouncements();
       setAnnouncements(data);
-    } catch {
-      setAnnouncements([
-        {
-          id: 'ann-1',
-          courseId: null,
-          authorId: 'a1',
-          title: 'Welcome to GUTech Fall 2026 Academic Term',
-          body: 'Welcome students and faculty members. Please ensure you have verified your student credentials and checked course syllabi on the portal.',
-          isPinned: true,
-          authorName: 'Dr. Nadeem Chishti (Administration)',
-          courseTitle: 'Global University Notice',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isRead: true
-        },
-        {
-          id: 'ann-2',
-          courseId: 'c1',
-          authorId: 't1',
-          title: 'Lab Session 3 Relocated to Room B-204',
-          body: 'The upcoming hands-on session on Friday will be held in computer lab B-204 due to server maintenance in Hall A.',
-          isPinned: false,
-          authorName: 'Prof. Imran Hanif',
-          courseTitle: 'WEB302: Modern Web Technologies',
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-          updatedAt: new Date(Date.now() - 86400000).toISOString(),
-          isRead: false
-        }
-      ]);
+    } catch (err) {
+      setLoadError(errorMessage(err, 'Announcements could not be loaded.'));
     } finally {
       setLoading(false);
     }
@@ -88,31 +69,64 @@ export const AnnouncementsPage: React.FC = () => {
     return () => window.cancelAnimationFrame(frame);
   }, [loading, announcements, focusAnnouncementId]);
 
+  const openPostModal = async () => {
+    setModalOpen(true);
+    if (myCourses.length) return;
+    try {
+      const list = role === 'admin' ? await api.getAllCoursesAdmin() : await api.getMyCourses();
+      const active = list.filter(course => !course.isArchived);
+      setMyCourses(active);
+      if (active.length) setTargetCourseId(current => current || active[0].id);
+    } catch (error) {
+      toast.error('Your classes could not be loaded', errorMessage(error));
+    }
+  };
+
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newAnn = await api.createAnnouncement({
-      courseId: targetType === 'course' ? 'c0000000-0000-0000-0000-000000000002' : null,
-      title,
-      body,
-      isPinned
-    });
-
-    setAnnouncements([newAnn, ...announcements]);
-    setModalOpen(false);
-    setTitle('');
-    setBody('');
-    setIsPinned(false);
+    if (targetType === 'course' && !targetCourseId) {
+      toast.error('Choose a class for this announcement');
+      return;
+    }
+    setPosting(true);
+    try {
+      const newAnn = await api.createAnnouncement({
+        courseId: targetType === 'course' ? targetCourseId : null,
+        title,
+        body,
+        isPinned
+      });
+      setAnnouncements([newAnn, ...announcements]);
+      setModalOpen(false);
+      setTitle('');
+      setBody('');
+      setIsPinned(false);
+      toast.success('Announcement posted');
+    } catch (error) {
+      // Keep the form open and filled in so the author can retry.
+      toast.error('Announcement was not posted', errorMessage(error));
+    } finally {
+      setPosting(false);
+    }
   };
 
   const handleMarkRead = async (id: string) => {
-    await api.markAnnouncementRead(id);
-    setAnnouncements(announcements.map(a => a.id === id ? { ...a, isRead: true } : a));
+    try {
+      await api.markAnnouncementRead(id);
+      setAnnouncements(announcements.map(a => a.id === id ? { ...a, isRead: true } : a));
+    } catch (error) {
+      toast.error('Could not mark as read', errorMessage(error));
+    }
   };
 
   const filtered = announcements.filter(a =>
     a.title.toLowerCase().includes(search.toLowerCase()) ||
     a.body.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (loadError) {
+    return <LoadError title="Announcements could not be loaded" message={loadError} onRetry={() => void fetchAnnouncements()} />;
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -130,7 +144,7 @@ export const AnnouncementsPage: React.FC = () => {
             variant="gold"
             size="sm"
             leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => setModalOpen(true)}
+            onClick={() => void openPostModal()}
           >
             Post Announcement
           </Button>
@@ -248,9 +262,18 @@ export const AnnouncementsPage: React.FC = () => {
                   targetType === 'course' ? 'bg-navy-900 text-white border-navy-900' : 'bg-slate-50 text-slate-700 border-slate-200'
                 }`}
               >
-                📚 Course-Specific (WEB302)
+                📚 Specific Class
               </button>
             </div>
+            {targetType === 'course' && (
+              <div className="mt-2">
+                <label htmlFor="announcement-course" className="sr-only">Class</label>
+                <select id="announcement-course" value={targetCourseId} onChange={e => setTargetCourseId(e.target.value)} required className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold focus:border-navy-600 focus:outline-none">
+                  {myCourses.length === 0 && <option value="">No classes available</option>}
+                  {myCourses.map(course => <option key={course.id} value={course.id}>{course.code} · {course.title}</option>)}
+                </select>
+              </div>
+            )}
           </div>
 
           <Textarea

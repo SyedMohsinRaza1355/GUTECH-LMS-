@@ -18,75 +18,45 @@ import { Card, Badge, EmptyState } from '../../components/ui/index.js';
 import { StudentMarkItem, MarksSummary } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 import { formatDate, calculateGradeLetter } from '../../lib/utils.js';
+import { errorMessage } from '../../components/ui/Toast.js';
+import { LoadError } from '../../components/ui/index.js';
 
 export const MarksPage: React.FC = () => {
   const { user } = useAuth();
   const [items, setItems] = useState<StudentMarkItem[]>([]);
   const [summary, setSummary] = useState<MarksSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const fetchMarks = async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const res = await api.getStudentMarks();
         setItems(res.items);
         setSummary(res.summary);
-      } catch {
-        // Fallback seeded view
-        const fallbackItems: StudentMarkItem[] = [
-          {
-            studentId: user?.id || 's1',
-            courseId: 'c1',
-            courseTitle: 'WEB302: Modern Web Technologies',
-            kind: 'assignment',
-            itemId: 'a1',
-            title: 'Assignment 1: RESTful API Design',
-            obtained: 95,
-            max: 100,
-            gradedAt: new Date(Date.now() - 86400000).toISOString()
-          },
-          {
-            studentId: user?.id || 's1',
-            courseId: 'c1',
-            courseTitle: 'WEB302: Modern Web Technologies',
-            kind: 'quiz',
-            itemId: 'q1',
-            title: 'Quiz 1: HTTP Protocols & REST Standards',
-            obtained: 20,
-            max: 20,
-            gradedAt: new Date(Date.now() - 4 * 3600000).toISOString()
-          },
-          {
-            studentId: user?.id || 's1',
-            courseId: 'c1',
-            courseTitle: 'WEB302: Modern Web Technologies',
-            kind: 'assignment',
-            itemId: 'a2',
-            title: 'Assignment 2: State Management & Realtime Sync',
-            obtained: null, // Pending grading
-            max: 50,
-            gradedAt: null
-          }
-        ];
-
-        setItems(fallbackItems);
-        setSummary({
-          totalObtained: 115,
-          totalMax: 120,
-          percentage: 95.83,
-          gradedCount: 2,
-          pendingCount: 1
-        });
+      } catch (err) {
+        setLoadError(errorMessage(err, 'Your marks could not be loaded.'));
       } finally {
         setLoading(false);
       }
     };
 
     fetchMarks();
-  }, [user]);
+  }, [user, reloadKey]);
 
-  const gradeInfo = summary ? calculateGradeLetter(summary.percentage) : { letter: 'A', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
+  const gradeInfo = summary && summary.gradedCount > 0 ? calculateGradeLetter(summary.percentage) : { letter: '—', color: 'text-slate-500 bg-slate-50 border-slate-200' };
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-extrabold text-navy-950 tracking-tight">Academic Performance & Gradebook</h1>
+        <LoadError title="Your marks could not be loaded" message={loadError} onRetry={() => setReloadKey(key => key + 1)} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -107,7 +77,7 @@ export const MarksPage: React.FC = () => {
             </div>
             <div>
               <p className="text-xs font-semibold text-slate-400">Academic Standing</p>
-              <p className="text-xl font-extrabold text-navy-950 mt-0.5">{summary.percentage}%</p>
+              <p className="text-xl font-extrabold text-navy-950 mt-0.5">{summary.gradedCount > 0 ? `${summary.percentage}%` : 'No grades yet'}</p>
             </div>
           </Card>
 

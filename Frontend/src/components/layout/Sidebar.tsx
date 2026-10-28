@@ -10,6 +10,7 @@ import {
   BookOpen,
   Award,
   ListChecks,
+  ClipboardCheck,
   MessageSquare,
   Bell,
   LifeBuoy,
@@ -52,6 +53,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCloseMobile }) => {
       label: 'Pending Work',
       icon: ListChecks,
       roles: ['student']
+    },
+    {
+      to: '/grading',
+      label: 'Grading Queue',
+      icon: ClipboardCheck,
+      roles: ['teacher', 'admin']
     },
     {
       to: '/chat',

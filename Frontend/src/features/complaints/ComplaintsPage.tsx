@@ -17,6 +17,8 @@ import {
   Building
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Textarea, ComplaintBadge, EmptyState } from '../../components/ui/index.js';
+import { LoadError } from '../../components/ui/index.js';
+import { errorMessage } from '../../components/ui/Toast.js';
 import { Complaint, ComplaintStatus } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 import { formatDate, formatDateTime } from '../../lib/utils.js';
@@ -37,6 +39,7 @@ export const ComplaintsPage: React.FC = () => {
 
   // Admin Response Modal
   const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [adminStatus, setAdminStatus] = useState<ComplaintStatus>('resolved');
   const [adminResponseText, setAdminResponseText] = useState('');
@@ -45,40 +48,12 @@ export const ComplaintsPage: React.FC = () => {
 
   const fetchComplaints = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = role === 'admin' ? await api.getAdminComplaints() : await api.getMyComplaints();
       setComplaints(data);
-    } catch {
-      // Fallback
-      setComplaints([
-        {
-          id: 'comp-1',
-          raisedBy: user?.id || 's1',
-          raisedByName: 'Ayesha Siddiqui',
-          courseId: 'c1',
-          courseTitle: 'WEB302: Modern Web Technologies',
-          category: 'academic',
-          subject: 'Late penalty clarification on Assignment 1',
-          description: 'I had a documented medical appointment on the due date and requested a 24-hour extension in advance.',
-          status: 'resolved',
-          adminResponse: 'Medical excuse verified. 24-hour extension approved and late penalty waived by faculty dean.',
-          createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-          updatedAt: new Date(Date.now() - 86400000 * 2).toISOString()
-        },
-        {
-          id: 'comp-2',
-          raisedBy: user?.id || 's1',
-          raisedByName: 'Ayesha Siddiqui',
-          courseId: null,
-          category: 'technical',
-          subject: 'Laboratory projector flickering in Building C',
-          description: 'The projector in room C-102 experiences intermittent HDMI signal loss during lecture demonstrations.',
-          status: 'open',
-          adminResponse: null,
-          createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-          updatedAt: new Date(Date.now() - 86400000 * 1).toISOString()
-        }
-      ]);
+    } catch (err) {
+      setLoadError(errorMessage(err, 'Your complaints could not be loaded.'));
     } finally {
       setLoading(false);
     }
@@ -139,6 +114,10 @@ export const ComplaintsPage: React.FC = () => {
       setAdminLoading(false);
     }
   };
+
+  if (loadError) {
+    return <LoadError title="Complaints could not be loaded" message={loadError} onRetry={() => void fetchComplaints()} />;
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">

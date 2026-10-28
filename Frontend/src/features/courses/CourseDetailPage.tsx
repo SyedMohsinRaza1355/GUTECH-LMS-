@@ -3,7 +3,7 @@
 // Hosts Resources, Assignments, Quizzes, Chat, Announcements, Gradebook & Students
 // ==============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.js';
 import {
@@ -27,7 +27,7 @@ import {
   ChevronRight,
   ExternalLink
 } from 'lucide-react';
-import { Button, Card, Badge, Modal, Input, EmptyState } from '../../components/ui/index.js';
+import { Button, Card, Badge, Modal, Input, EmptyState, LoadError } from '../../components/ui/index.js';
 import {
   Course,
   Resource,
@@ -55,6 +55,9 @@ export const CourseDetailPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { user, role } = useAuth();
   const toast = useToast();
+  const [courseError, setCourseError] = useState<string | null>(null);
+  const [partialErrors, setPartialErrors] = useState<string[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const requestedTab = searchParams.get('tab');
   const selectedAssignmentId = searchParams.get('assignmentId');
@@ -134,41 +137,56 @@ export const CourseDetailPage: React.FC = () => {
     return () => window.cancelAnimationFrame(frame);
   }, [activeTab, assignments, selectedAssignmentId]);
 
+  // Deep link from the grading queue / dashboard: ?tab=assignments&assignmentId=X&grade=1 opens that grading desk.
+  const autoGradeOpened = useRef<string | null>(null);
+  useEffect(() => {
+    if (searchParams.get('grade') !== '1' || !selectedAssignmentId || (role !== 'teacher' && role !== 'admin')) return;
+    if (autoGradeOpened.current === selectedAssignmentId) return;
+    const target = assignments.find(item => item.id === selectedAssignmentId);
+    if (!target) return;
+    autoGradeOpened.current = selectedAssignmentId;
+    void handleOpenGradingDesk(target);
+  }, [assignments, selectedAssignmentId, role, searchParams]);
+
   useEffect(() => {
     if (!courseId) return;
 
     const loadData = async () => {
       setLoading(true);
-      try {
-        const [cDetail, rList, aList, qList, annList] = await Promise.all([
-          api.getCourseDetail(courseId).catch(() => ({
-            id: courseId,
-            code: 'WEB302',
-            title: 'Modern Web Technologies',
-            description: 'Full-stack application architecture using React, Node.js, and Supabase.',
-            isArchived: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            studentsCount: 4
-          })),
-          api.getCourseResources(courseId).catch(() => []),
-          api.getCourseAssignments(courseId).catch(() => []),
-          api.getCourseQuizzes(courseId).catch(() => []),
-          api.getAnnouncements(courseId).catch(() => [])
-        ]);
+      setCourseError(null);
+      setPartialErrors([]);
+      const [detailResult, resourceResult, assignmentResult, quizResult, announcementResult] = await Promise.allSettled([
+        api.getCourseDetail(courseId),
+        api.getCourseResources(courseId),
+        api.getCourseAssignments(courseId),
+        api.getCourseQuizzes(courseId),
+        api.getAnnouncements(courseId)
+      ]);
 
-        setCourse(cDetail);
-        setResources(rList);
-        setAssignments(aList);
-        setQuizzes(qList);
-        setCourseAnnouncements(annList);
-      } finally {
+      if (detailResult.status === 'rejected') {
+        setCourse(null);
+        setCourseError(errorMessage(detailResult.reason, 'This course could not be loaded.'));
         setLoading(false);
+        return;
       }
+
+      const failed: string[] = [];
+      const pick = <T,>(result: PromiseSettledResult<T>, label: string, fallback: T): T => {
+        if (result.status === 'fulfilled') return result.value;
+        failed.push(label);
+        return fallback;
+      };
+      setCourse(detailResult.value);
+      setResources(pick(resourceResult, 'resources', []));
+      setAssignments(pick(assignmentResult, 'assignments', []));
+      setQuizzes(pick(quizResult, 'quizzes', []));
+      setCourseAnnouncements(pick(announcementResult, 'announcements', []));
+      setPartialErrors(failed);
+      setLoading(false);
     };
 
-    loadData();
-  }, [courseId, role]);
+    void loadData();
+  }, [courseId, role, reloadKey]);
 
   useEffect(() => {
     if (!courseId || activeTab !== 'chat') return;
@@ -324,7 +342,7 @@ export const CourseDetailPage: React.FC = () => {
   const handleStartQuiz = async (quiz: Quiz) => {
     const attempt = await api.startQuizAttempt(quiz.id);
     setActiveQuizAttempt({ quiz, ...attempt });
-    setQuizTimerSeconds(attempt.timeLimitMinutes * 60);
+    setQuizTimerSeconds(attempt.expiresAt ? Math.max(1, Math.round((Date.parse(attempt.expiresAt) - Date.now()) / 1000)) : attempt.timeLimitMinutes * 60);
     setQuizAnswers({});
     setQuizResultScore(null);
   };
@@ -354,10 +372,27 @@ export const CourseDetailPage: React.FC = () => {
     setCsvResult(res);
   };
 
-  if (!course) return null;
+  if (courseError) {
+    return (
+      <div className="space-y-4">
+        <Link to="/courses" className="text-xs font-bold text-navy-700 hover:text-navy-950">← Back to courses</Link>
+        <LoadError title="This course could not be loaded" message={courseError} onRetry={() => setReloadKey(key => key + 1)} />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return <div className="space-y-4" role="status" aria-live="polite"><span className="sr-only">Loading course…</span><div className="skeleton h-40 rounded-3xl" /><div className="skeleton h-64 rounded-2xl" /></div>;
+  }
 
   return (
     <div className="space-y-6">
+      {partialErrors.length > 0 && (
+        <div role="alert" className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-amber-900">Some sections could not load: {partialErrors.join(', ')}. What you see may be incomplete.</p>
+          <Button size="sm" variant="outline" onClick={() => setReloadKey(key => key + 1)}>Retry</Button>
+        </div>
+      )}
       {/* Course Header Banner */}
       <div className="rounded-3xl bg-gradient-to-r from-navy-950 to-navy-800 p-6 sm:p-8 text-white shadow-xl border border-navy-800">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -579,7 +614,22 @@ export const CourseDetailPage: React.FC = () => {
                               <Badge variant="success" size="sm" className="ml-2">Graded</Badge>
                             </div>
                           ) : (
-                            <Badge variant="navy" size="sm">Submitted (Pending Grade)</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="navy" size="sm">Submitted (Pending Grade)</Badge>
+                              {(!isPastDue || a.allowLate) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSubmittingAssignment(a);
+                                    setStudentTextAnswer(sub.textAnswer || '');
+                                    setSubmitModalOpen(true);
+                                  }}
+                                >
+                                  Edit submission
+                                </Button>
+                              )}
+                            </div>
                           )
                         ) : (
                           <Button

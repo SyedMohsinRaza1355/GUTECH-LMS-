@@ -376,3 +376,76 @@ export const exportGradebookCsv = async (req: Request, res: Response, next: Next
     next(err);
   }
 };
+
+// Teacher / admin work queue: assignments that have submissions waiting to be graded.
+export const getGradingQueue = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user;
+    if (!user || (user.role !== 'teacher' && user.role !== 'admin')) return next(forbidden('Only teachers and admins have a grading queue'));
+
+    type Row = { assignmentId: string; courseId: string; courseCode: string; courseTitle: string; title: string; dueAt: string; maxMarks: number; ungradedCount: number; gradedCount: number; totalStudents: number; oldestSubmittedAt: string | null; lateCount: number };
+    let rows: Row[] = [];
+    let classes = 0;
+
+    if (isSupabaseConfigured() && user.isDemoUser !== true) {
+      let courseIds: string[];
+      if (user.role === 'admin') {
+        const { data, error } = await supabaseAdmin.from('courses').select('id').eq('is_archived', false);
+        if (error) throw error;
+        courseIds = (data || []).map(row => row.id);
+      } else {
+        const { data, error } = await supabaseAdmin.from('course_teachers').select('course_id').eq('teacher_id', user.id);
+        if (error) throw error;
+        courseIds = (data || []).map(row => row.course_id);
+      }
+      classes = courseIds.length;
+      if (courseIds.length) {
+        const [{ data: courses, error: courseError }, { data: assignments, error: assignmentError }, { data: enrollments, error: enrollmentError }] = await Promise.all([
+          supabaseAdmin.from('courses').select('id,code,title').in('id', courseIds),
+          supabaseAdmin.from('assignments').select('id,course_id,title,due_at,max_marks,submissions(id,submitted_at,marks_obtained,is_late)').in('course_id', courseIds),
+          supabaseAdmin.from('enrollments').select('course_id').in('course_id', courseIds)
+        ]);
+        if (courseError) throw courseError;
+        if (assignmentError) throw assignmentError;
+        if (enrollmentError) throw enrollmentError;
+        const courseById = new Map((courses || []).map(course => [course.id, course]));
+        const studentsByCourse = new Map<string, number>();
+        (enrollments || []).forEach(row => studentsByCourse.set(row.course_id, (studentsByCourse.get(row.course_id) || 0) + 1));
+        rows = (assignments || []).map((item: any) => {
+          const submissions: any[] = item.submissions || [];
+          const ungraded = submissions.filter(s => s.marks_obtained === null);
+          const course = courseById.get(item.course_id);
+          return {
+            assignmentId: item.id, courseId: item.course_id, courseCode: course?.code || '', courseTitle: course?.title || '', title: item.title,
+            dueAt: item.due_at, maxMarks: Number(item.max_marks), ungradedCount: ungraded.length, gradedCount: submissions.length - ungraded.length,
+            totalStudents: studentsByCourse.get(item.course_id) || 0,
+            oldestSubmittedAt: ungraded.length ? ungraded.map(s => s.submitted_at).sort()[0] : null,
+            lateCount: ungraded.filter(s => s.is_late).length
+          };
+        });
+      }
+    } else {
+      const myCourseIds = user.role === 'admin'
+        ? mockDb.courses.filter(course => !course.isArchived).map(course => course.id)
+        : mockDb.courseTeachers.filter(link => link.teacherId === user.id).map(link => link.courseId);
+      classes = myCourseIds.length;
+      rows = mockDb.assignments.filter(item => myCourseIds.includes(item.courseId)).map(item => {
+        const course = mockDb.courses.find(entry => entry.id === item.courseId);
+        const submissions = mockDb.submissions.filter(s => s.assignmentId === item.id);
+        const ungraded = submissions.filter(s => s.marksObtained === null || s.marksObtained === undefined);
+        return {
+          assignmentId: item.id, courseId: item.courseId, courseCode: course?.code || '', courseTitle: course?.title || '', title: item.title,
+          dueAt: item.dueAt, maxMarks: item.maxMarks, ungradedCount: ungraded.length, gradedCount: submissions.length - ungraded.length,
+          totalStudents: mockDb.enrollments.filter(e => e.courseId === item.courseId).length,
+          oldestSubmittedAt: ungraded.length ? ungraded.map(s => s.submittedAt).sort()[0] : null,
+          lateCount: ungraded.filter(s => s.isLate).length
+        };
+      });
+    }
+
+    const items = rows.filter(row => row.ungradedCount > 0).sort((a, b) => Date.parse(a.oldestSubmittedAt || '') - Date.parse(b.oldestSubmittedAt || ''));
+    return res.status(200).json({ data: { items, summary: { ungradedTotal: items.reduce((sum, row) => sum + row.ungradedCount, 0), assignmentsToGrade: items.length, classes } } });
+  } catch (error) {
+    next(error);
+  }
+};

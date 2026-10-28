@@ -64,12 +64,8 @@ export const ProfilePage: React.FC = () => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch {
-      // Mock fallback update
-      setPasswordSuccess('Your security credentials have been updated successfully.');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+    } catch (err) {
+      setPasswordError(err instanceof Error && err.message ? err.message : 'The password could not be changed. Check your current password and try again.');
     } finally {
       setPasswordLoading(false);
     }

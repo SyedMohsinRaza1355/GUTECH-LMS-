@@ -218,7 +218,20 @@ export const mockDb: MockDatabase = {
       feedback: 'Good work. Add rate-limiting for production readiness.',
       gradedBy: 't0000000-0000-0000-0000-000000000001',
       gradedAt: new Date(Date.now() - 12 * 3600000).toISOString()
-    }
+    },
+    ...['3', '4', '5'].map((n, i) => ({
+      id: `sub00000-0000-0000-0000-00000000010${n}`,
+      assignmentId: 'a1000000-0000-0000-0000-000000000001',
+      studentId: `s0000000-0000-0000-0000-00000000000${n}`,
+      textAnswer: 'Submitted API with JWT auth, Zod validation and a Postman collection.',
+      filePath: null,
+      submittedAt: new Date(Date.now() - (i + 1) * 3600000).toISOString(),
+      isLate: false,
+      marksObtained: null,
+      feedback: null,
+      gradedBy: null,
+      gradedAt: null
+    }))
   ],
 
   // --------------------------------------------------------------------------

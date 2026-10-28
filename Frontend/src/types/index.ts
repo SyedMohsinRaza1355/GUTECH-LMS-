@@ -176,6 +176,26 @@ export interface StudentMarkItem {
   gradedAt?: string | null;
 }
 
+export interface GradingQueueItem {
+  assignmentId: string;
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  title: string;
+  dueAt: string;
+  maxMarks: number;
+  ungradedCount: number;
+  gradedCount: number;
+  totalStudents: number;
+  oldestSubmittedAt: string | null;
+  lateCount: number;
+}
+
+export interface GradingQueue {
+  items: GradingQueueItem[];
+  summary: { ungradedTotal: number; assignmentsToGrade: number; classes: number };
+}
+
 export interface PendingTask {
   id: string;
   courseId: string;

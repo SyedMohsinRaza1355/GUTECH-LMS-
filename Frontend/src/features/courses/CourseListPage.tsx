@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.js';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   Search,
@@ -15,6 +15,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Button, Card, Input, Modal, Badge, EmptyState } from '../../components/ui/index.js';
+import { LoadError } from '../../components/ui/index.js';
+import { errorMessage } from '../../components/ui/Toast.js';
 import { Course } from '../../types/index.js';
 import { api } from '../../lib/api.js';
 
@@ -23,9 +25,11 @@ export const CourseListPage: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Admin New Course Modal
-  const [modalOpen, setModalOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [modalOpen, setModalOpen] = useState(searchParams.get('new') === '1' && role === 'admin');
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -35,43 +39,12 @@ export const CourseListPage: React.FC = () => {
 
   const fetchCourses = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = role === 'admin' ? await api.getAllCoursesAdmin() : await api.getMyCourses();
       setCourses(data);
-    } catch {
-      // Fallback seed courses
-      setCourses([
-        {
-          id: 'c0000000-0000-0000-0000-000000000002',
-          code: 'WEB302',
-          title: 'Modern Web Technologies',
-          description: 'Full-stack application architecture using React, Node.js, and Supabase.',
-          isArchived: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          studentsCount: 4
-        },
-        {
-          id: 'c0000000-0000-0000-0000-000000000001',
-          code: 'CS101',
-          title: 'Introduction to Computer Science',
-          description: 'Foundations of computing, data structures, and algorithmic problem solving.',
-          isArchived: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          studentsCount: 3
-        },
-        {
-          id: 'c0000000-0000-0000-0000-000000000003',
-          code: 'SE405',
-          title: 'Software Architecture & Quality',
-          description: 'Design patterns, microservices, testing paradigms, CI/CD, and enterprise architecture.',
-          isArchived: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          studentsCount: 2
-        }
-      ]);
+    } catch (err) {
+      setLoadError(errorMessage(err, 'Your courses could not be loaded.'));
     } finally {
       setLoading(false);
     }
@@ -116,6 +89,10 @@ export const CourseListPage: React.FC = () => {
     c.title.toLowerCase().includes(search.toLowerCase()) ||
     (c.description && c.description.toLowerCase().includes(search.toLowerCase()))
   );
+
+  if (loadError) {
+    return <LoadError title="Courses could not be loaded" message={loadError} onRetry={() => void fetchCourses()} />;
+  }
 
   return (
     <div className="space-y-6">

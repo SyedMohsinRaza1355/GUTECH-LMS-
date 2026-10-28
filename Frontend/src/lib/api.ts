@@ -14,7 +14,8 @@ import {
   Complaint,
   StudentMarkItem,
   MarksSummary,
-  PendingTask
+  PendingTask,
+  GradingQueue
 } from '../types/index.js';
 
 export interface AuditEntry {
@@ -72,6 +73,7 @@ class ApiClient {
       // In case Backend server is offline during initial frontend preview,
       // fallback smoothly to local state preview
       console.warn(`[API Connection Note for ${endpoint}]:`, (err as Error)?.message);
+      if (err instanceof TypeError) throw new Error('Cannot reach the server. Check your internet connection and try again.');
       throw err;
     }
   }
@@ -291,6 +293,10 @@ class ApiClient {
   async getStudentMarks(courseId?: string): Promise<{ items: StudentMarkItem[]; summary: MarksSummary }> {
     const url = courseId ? `/me/marks?courseId=${courseId}` : '/me/marks';
     return this.request<{ items: StudentMarkItem[]; summary: MarksSummary }>(url);
+  }
+
+  async getGradingQueue(): Promise<GradingQueue> {
+    return this.request<GradingQueue>('/me/grading-queue');
   }
 
   async getPendingTasks(): Promise<PendingTask[]> {

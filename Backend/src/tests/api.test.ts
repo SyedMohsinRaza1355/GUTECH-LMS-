@@ -160,3 +160,38 @@ describe('Admin provisioning', () => {
     expect(res.status).toBe(422);
   });
 });
+
+describe('Work queues and quiz attempts', () => {
+  it('gives a teacher a grading queue with jump targets and keeps it away from students', async () => {
+    const res = await request(app).get('/api/me/grading-queue').set('Authorization', TEACHER_WEB);
+    expect(res.status).toBe(200);
+    expect(res.body.data.summary.ungradedTotal).toBeGreaterThan(0);
+    const first = res.body.data.items[0];
+    expect(first.assignmentId).toBeDefined();
+    expect(first.courseId).toBeDefined();
+    expect(first.ungradedCount).toBeGreaterThan(0);
+    const asStudent = await request(app).get('/api/me/grading-queue').set('Authorization', STUDENT);
+    expect(asStudent.status).toBe(403);
+  });
+
+  it('only lists a teacher\'s own courses in the grading queue', async () => {
+    const res = await request(app).get('/api/me/grading-queue').set('Authorization', TEACHER_OTHER);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it('lets a student resume an unfinished quiz after a refresh, but not retake a finished one', async () => {
+    const student = 'Bearer demo-token-s0000000-0000-0000-0000-000000000007';
+    const quiz = 'q0000000-0000-0000-0000-000000000001';
+    const first = await request(app).post(`/api/quizzes/${quiz}/attempt`).set('Authorization', student);
+    expect(first.status).toBe(200);
+    const resumed = await request(app).post(`/api/quizzes/${quiz}/attempt`).set('Authorization', student);
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.data.attemptId).toBe(first.body.data.attemptId);
+    expect(JSON.stringify(resumed.body)).not.toContain('correctOptionIds');
+    const done = await request(app).post(`/api/quizzes/${quiz}/attempt/submit`).set('Authorization', student).send({ answers: {} });
+    expect(done.status).toBe(200);
+    const retake = await request(app).post(`/api/quizzes/${quiz}/attempt`).set('Authorization', student);
+    expect(retake.status).toBe(409);
+  });
+});
