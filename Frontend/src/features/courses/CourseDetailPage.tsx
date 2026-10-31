@@ -25,7 +25,9 @@ import {
   Sparkles,
   Timer,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Pencil,
+  ClipboardCheck
 } from 'lucide-react';
 import { Button, Card, Badge, Modal, Input, Textarea, EmptyState, LoadError } from '../../components/ui/index.js';
 import {
@@ -37,6 +39,10 @@ import {
   ChatMessage
 } from '../../types/index.js';
 import { api } from '../../lib/api.js';
+import { GradingDesk } from '../grading/GradingDesk.js';
+import { QuizResultsModal } from '../quizzes/QuizResultsModal.js';
+import { QuizBuilderModal } from '../quizzes/QuizBuilderModal.js';
+import { GradebookPanel } from './GradebookPanel.js';
 import { useToast, errorMessage } from '../../components/ui/Toast.js';
 import {
   formatDate,
@@ -93,17 +99,12 @@ export const CourseDetailPage: React.FC = () => {
   const [submittingAssignment, setSubmittingAssignment] = useState<Assignment | null>(null);
   const [studentTextAnswer, setStudentTextAnswer] = useState('');
 
-  // Teacher Grading Desk state
-  const [gradeModalOpen, setGradeModalOpen] = useState(false);
-  const [activeAssignmentForGrading, setActiveAssignmentForGrading] = useState<Assignment | null>(null);
-  const [gradingSubmissions, setGradingSubmissions] = useState<any[]>([]);
-  const [loadingGradingAssignmentId, setLoadingGradingAssignmentId] = useState<string | null>(null);
-  const [gradingError, setGradingError] = useState('');
-  const [selectedSubForGrading, setSelectedSubForGrading] = useState<any | null>(null);
-  const [gradingMarksInput, setGradingMarksInput] = useState<string>('');
-  const [gradingFieldError, setGradingFieldError] = useState('');
-  const [savingGrade, setSavingGrade] = useState(false);
-  const [gradingFeedbackInput, setGradingFeedbackInput] = useState<string>('');
+  // Teacher tools
+  const [gradingAssignment, setGradingAssignment] = useState<Assignment | null>(null);
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [quizBuilderOpen, setQuizBuilderOpen] = useState(false);
+  const [resultsQuiz, setResultsQuiz] = useState<Quiz | null>(null);
+  const [gradebookReload, setGradebookReload] = useState(0);
 
   // Quizzes state
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -121,7 +122,6 @@ export const CourseDetailPage: React.FC = () => {
   const [courseAnnouncements, setCourseAnnouncements] = useState<Announcement[]>([]);
 
   // Gradebook state
-  const [gradebookData, setGradebookData] = useState<{ columns: any[]; rows: any[] } | null>(null);
 
   // Students & CSV state
   const [enrolledStudents, setEnrolledStudents] = useState<any[]>([]);
@@ -154,7 +154,7 @@ export const CourseDetailPage: React.FC = () => {
     const target = assignments.find(item => item.id === selectedAssignmentId);
     if (!target) return;
     autoGradeOpened.current = selectedAssignmentId;
-    void handleOpenGradingDesk(target);
+    setGradingAssignment(target);
   }, [assignments, selectedAssignmentId, role, searchParams]);
 
   useEffect(() => {
@@ -201,11 +201,6 @@ export const CourseDetailPage: React.FC = () => {
     if (!courseId || activeTab !== 'chat') return;
     api.getChatMessages(courseId).then(setChatMessages).catch(() => setChatMessages([]));
   }, [courseId, activeTab]);
-
-  useEffect(() => {
-    if (!courseId || activeTab !== 'gradebook' || (role !== 'teacher' && role !== 'admin')) return;
-    api.getCourseGradebook(courseId).then(setGradebookData).catch(() => setGradebookData(null));
-  }, [courseId, activeTab, role]);
 
   useEffect(() => {
     if (!courseId || activeTab !== 'students' || (role !== 'teacher' && role !== 'admin')) return;
@@ -309,24 +304,27 @@ export const CourseDetailPage: React.FC = () => {
     }
     setSavingAssignment(true);
     try {
-      const newAssign = await api.createAssignment(courseId, {
-        title: assignTitle,
-        instructions: assignInst,
+      const payload = {
+        title: assignTitle.trim(),
+        instructions: assignInst.trim(),
         maxMarks: Number(assignMarks),
         dueAt: assignDueDate ? new Date(assignDueDate).toISOString() : new Date(Date.now() + 7 * 86400000).toISOString(),
         allowLate: assignAllowLate
-      });
-      setAssignments([newAssign, ...assignments]);
+      };
+      if (editingAssignment) {
+        const saved = await api.patchAssignment(editingAssignment.id, payload);
+        setAssignments(current => current.map(item => item.id === editingAssignment.id ? { ...item, ...saved } : item));
+        toast.success('Assignment updated', 'Students see the new details straight away.');
+      } else {
+        const created = await api.createAssignment(courseId, payload);
+        setAssignments([created, ...assignments]);
+        toast.success('Assignment published', created.title + ' is now visible to enrolled students.');
+      }
       setAssignModalOpen(false);
-      setAssignTitle('');
-      setAssignInst('');
-      setAssignDueDate('');
-      setAssignMarks(100);
-      setAssignAllowLate(false);
-      toast.success('Assignment published', newAssign.title + ' is now visible to enrolled students.');
+      setEditingAssignment(null);
     } catch (error) {
       // Keep the form open with the teacher's input intact so nothing has to be retyped.
-      toast.error('Assignment was not saved', errorMessage(error));
+      toast.error(editingAssignment ? 'Changes were not saved' : 'Assignment was not saved', errorMessage(error));
     } finally {
       setSavingAssignment(false);
     }
@@ -341,7 +339,7 @@ export const CourseDetailPage: React.FC = () => {
       return;
     }
     try {
-      const sub = await api.submitAssignment(submittingAssignment.id, studentTextAnswer.trim(), 'submissions/student_work.pdf');
+      const sub = await api.submitAssignment(submittingAssignment.id, studentTextAnswer.trim());
       setAssignments(assignments.map(a => a.id === submittingAssignment.id ? { ...a, mySubmission: sub } : a));
       setSubmitModalOpen(false);
       setStudentTextAnswer('');
@@ -352,42 +350,64 @@ export const CourseDetailPage: React.FC = () => {
     }
   };
 
-  const handleOpenGradingDesk = async (assign: Assignment) => {
-    setActiveAssignmentForGrading(assign);
-    setGradeModalOpen(true);
-    setGradingError('');
-    setGradingSubmissions([]);
-    setLoadingGradingAssignmentId(assign.id);
+  const refreshAssignments = async () => {
+    if (!courseId) return;
     try {
-      const data = await api.getAssignmentSubmissions(assign.id);
-      setGradingSubmissions(data.submissions);
-    } catch (error) {
-      setGradingError(error instanceof Error ? error.message : 'Could not load student submissions.');
-    } finally {
-      setLoadingGradingAssignmentId(null);
+      setAssignments(await api.getCourseAssignments(courseId));
+    } catch {
+      /* counts refresh on the next visit */
     }
   };
 
-  const handleSaveGrade = async (subId: string) => {
-    const max = activeAssignmentForGrading?.maxMarks ?? 0;
-    const marks = Number(gradingMarksInput);
-    if (gradingMarksInput.trim() === '' || Number.isNaN(marks) || marks < 0 || marks > max) {
-      setGradingFieldError('Enter marks between 0 and ' + max + '.');
-      return;
-    }
-    setGradingFieldError('');
-    setSavingGrade(true);
+  const refreshQuizzes = async () => {
+    if (!courseId) return;
     try {
-      const updated = await api.gradeSubmission(subId, marks, gradingFeedbackInput.trim());
-      setGradingSubmissions(current => current.map(s => s.submission?.id === subId ? { ...s, submission: updated } : s));
-      setSelectedSubForGrading(null);
-      toast.success('Grade saved', marks + ' / ' + max + ' recorded and visible to the student.');
+      setQuizzes(await api.getCourseQuizzes(courseId));
+    } catch {
+      /* counts refresh on the next visit */
+    }
+  };
+
+  const toLocalInput = (iso: string) => {
+    const date = new Date(iso);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const openCreateAssignment = () => {
+    setEditingAssignment(null);
+    setAssignTitle(''); setAssignInst(''); setAssignMarks(100); setAssignDueDate(''); setAssignAllowLate(false);
+    setAssignModalOpen(true);
+  };
+
+  const openEditAssignment = (assignment: Assignment) => {
+    setEditingAssignment(assignment);
+    setAssignTitle(assignment.title);
+    setAssignInst(assignment.instructions);
+    setAssignMarks(assignment.maxMarks);
+    setAssignDueDate(toLocalInput(assignment.dueAt));
+    setAssignAllowLate(assignment.allowLate);
+    setAssignModalOpen(true);
+  };
+
+  const handleDeleteAssignment = async (assignment: Assignment) => {
+    const submitted = assignment.submissionsCount ?? 0;
+    if (!window.confirm(`Delete "${assignment.title}"?${submitted ? ` ${submitted} submission${submitted === 1 ? '' : 's'} and their grades will be permanently removed.` : ''}`)) return;
+    try {
+      await api.deleteAssignment(assignment.id);
+      setAssignments(current => current.filter(item => item.id !== assignment.id));
+      toast.success('Assignment deleted');
     } catch (error) {
-      // Leave the marks and feedback in place so the teacher can retry.
-      setGradingFieldError(errorMessage(error));
-      toast.error('Grade was not saved', errorMessage(error));
-    } finally {
-      setSavingGrade(false);
+      toast.error('Could not delete the assignment', errorMessage(error));
+    }
+  };
+
+  const handleToggleQuizPublished = async (quiz: Quiz) => {
+    try {
+      const updated = await api.patchQuiz(quiz.id, { isPublished: !quiz.isPublished });
+      setQuizzes(current => current.map(item => item.id === quiz.id ? { ...item, isPublished: updated.isPublished } : item));
+      toast.success(updated.isPublished ? 'Quiz published' : 'Quiz moved to drafts', updated.isPublished ? 'Students can see it.' : 'Students no longer see it.');
+    } catch (error) {
+      toast.error('Could not change the quiz', errorMessage(error));
     }
   };
 
@@ -657,7 +677,7 @@ export const CourseDetailPage: React.FC = () => {
                 variant="gold"
                 size="sm"
                 leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => setAssignModalOpen(true)}
+                onClick={openCreateAssignment}
               >
                 Create Assignment
               </Button>
@@ -727,14 +747,13 @@ export const CourseDetailPage: React.FC = () => {
                           </Button>
                         )
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={loadingGradingAssignmentId !== null}
-                          onClick={() => handleOpenGradingDesk(a)}
-                        >
-                          {loadingGradingAssignmentId === a.id ? 'Loading submissions…' : `Grading Desk (${a.submissionsCount ?? 0})`}
-                        </Button>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <Button size="sm" variant="gold" leftIcon={<ClipboardCheck className="h-3.5 w-3.5" />} onClick={() => setGradingAssignment(a)}>
+                            {(a.ungradedCount ?? 0) > 0 ? `Grade · ${a.ungradedCount} to do` : `Grade (${a.submissionsCount ?? 0})`}
+                          </Button>
+                          <Button size="sm" variant="outline" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`Edit ${a.title}`} onClick={() => openEditAssignment(a)}>Edit</Button>
+                          <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50" leftIcon={<Trash2 className="h-3.5 w-3.5" />} aria-label={`Delete ${a.title}`} onClick={() => void handleDeleteAssignment(a)}>Delete</Button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -768,7 +787,14 @@ export const CourseDetailPage: React.FC = () => {
               <h3 className="text-base font-bold text-navy-950">Course Quizzes & Assessments</h3>
               <p className="text-xs text-slate-500">Timed assessments with server-side auto grading</p>
             </div>
+            {(role === 'teacher' || role === 'admin') && (
+              <Button variant="gold" size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setQuizBuilderOpen(true)}>Create quiz</Button>
+            )}
           </div>
+
+          {quizzes.length === 0 && (
+            <EmptyState icon={<HelpCircle className="h-6 w-6" />} title="No quizzes yet" description={role === 'student' ? 'Quizzes your teacher publishes will appear here.' : 'Create the first quiz for this class.'} />
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {quizzes.map(q => {
@@ -776,23 +802,35 @@ export const CourseDetailPage: React.FC = () => {
               return (
                 <Card key={q.id} className="flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2 gap-2">
                       <span className="text-xs font-bold text-navy-900">{q.title}</span>
-                      <Badge variant="navy">{q.timeLimitMinutes} Mins</Badge>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {role !== 'student' && <Badge variant={q.isPublished ? 'success' : 'warning'} size="sm">{q.isPublished ? 'Published' : 'Draft'}</Badge>}
+                        <Badge variant="navy">{q.timeLimitMinutes} Mins</Badge>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-500">{q.description}</p>
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                     <div>
-                      {myAttempt ? (
+                      {role !== 'student' ? (
+                        <span className="text-xs font-semibold text-slate-500">{q.attemptsCount ?? 0} attempt{(q.attemptsCount ?? 0) === 1 ? '' : 's'} · {q.totalMarks ?? 0} marks</span>
+                      ) : myAttempt ? (
                         <div className="text-xs font-bold text-emerald-600">
-                          Score: {myAttempt.score} pts (Completed)
+                          Score: {myAttempt.score}{q.totalMarks ? ` / ${q.totalMarks}` : ''} pts (Completed)
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">1 Attempt Allowed</span>
                       )}
                     </div>
+
+                    {role !== 'student' && (
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => void handleToggleQuizPublished(q)}>{q.isPublished ? 'Unpublish' : 'Publish'}</Button>
+                        <Button size="sm" variant="gold" leftIcon={<ClipboardCheck className="h-3.5 w-3.5" />} onClick={() => setResultsQuiz(q)}>Results &amp; marks</Button>
+                      </div>
+                    )}
 
                     {role === 'student' && (
                       <Button
@@ -899,56 +937,15 @@ export const CourseDetailPage: React.FC = () => {
       )}
 
       {/* TAB 7: GRADEBOOK (Teacher/Admin only) */}
-      {activeTab === 'gradebook' && (role === 'teacher' || role === 'admin') && (
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-            <div>
-              <h3 className="text-sm font-bold text-navy-950">Official Assessment Gradebook</h3>
-              <p className="text-xs text-slate-500">Student matrix with calculated totals and percentages</p>
-            </div>
-            <a
-              href={`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/courses/${courseId}/gradebook.csv`}
-              download
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export CSV (Excel)</span>
-            </a>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-navy-950 font-bold">
-                  <th className="p-3">Student Name</th>
-                  <th className="p-3">Roll No</th>
-                  <th className="p-3">Assignment 1 (100)</th>
-                  <th className="p-3">Quiz 1 (20)</th>
-                  <th className="p-3">Total / 120</th>
-                  <th className="p-3">Percentage</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                <tr className="hover:bg-slate-50/60">
-                  <td className="p-3 font-semibold text-navy-900">Ayesha Siddiqui</td>
-                  <td className="p-3 font-mono text-slate-500">GUT-2023-0142</td>
-                  <td className="p-3 font-bold text-emerald-600">95.00</td>
-                  <td className="p-3 font-bold text-emerald-600">20.00</td>
-                  <td className="p-3 font-extrabold text-navy-900">115.00</td>
-                  <td className="p-3 font-extrabold text-emerald-600">95.83%</td>
-                </tr>
-                <tr className="hover:bg-slate-50/60">
-                  <td className="p-3 font-semibold text-navy-900">Ayesha Siddiqui</td>
-                  <td className="p-3 font-mono text-slate-500">GUT-2023-0189</td>
-                  <td className="p-3 font-bold text-emerald-600">88.00</td>
-                  <td className="p-3 text-slate-400">Pending</td>
-                  <td className="p-3 font-extrabold text-navy-900">88.00</td>
-                  <td className="p-3 font-extrabold text-navy-900">88.00%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      {activeTab === 'gradebook' && (role === 'teacher' || role === 'admin') && courseId && (
+        <GradebookPanel
+          courseId={courseId}
+          reloadKey={gradebookReload}
+          onOpenColumn={column => {
+            if (column.kind === 'quiz') setResultsQuiz(quizzes.find(item => item.id === column.id) || null);
+            else setGradingAssignment(assignments.find(item => item.id === column.id) || null);
+          }}
+        />
       )}
 
       {/* TAB 8: STUDENTS & ENROLLMENT (Teacher/Admin only) */}
@@ -1122,8 +1119,8 @@ export const CourseDetailPage: React.FC = () => {
       <Modal
         isOpen={assignModalOpen}
         onClose={() => setAssignModalOpen(false)}
-        title="Create assignment"
-        subtitle="Enrolled students see it immediately and can submit until the due date"
+        title={editingAssignment ? 'Edit assignment' : 'Create assignment'}
+        subtitle={editingAssignment ? 'Changes apply to everyone immediately. Marks already given are kept.' : 'Enrolled students see it immediately and can submit until the due date'}
         maxWidth="lg"
       >
         <form onSubmit={handleCreateAssignment} className="space-y-4">
@@ -1137,7 +1134,7 @@ export const CourseDetailPage: React.FC = () => {
             <input type="checkbox" checked={assignAllowLate} onChange={e => setAssignAllowLate(e.target.checked)} />
             Accept late submissions (they are marked late)
           </label>
-          <Button type="submit" variant="gold" className="w-full font-bold" isLoading={savingAssignment}>Publish assignment</Button>
+          <Button type="submit" variant="gold" className="w-full font-bold" isLoading={savingAssignment}>{editingAssignment ? 'Save changes' : 'Publish assignment'}</Button>
         </form>
       </Modal>
 
@@ -1167,87 +1164,12 @@ export const CourseDetailPage: React.FC = () => {
         </form>
       </Modal>
 
-      {/* TEACHER GRADING DESK MODAL */}
-      <Modal
-        isOpen={gradeModalOpen}
-        onClose={() => setGradeModalOpen(false)}
-        title={`Grading Desk: ${activeAssignmentForGrading?.title}`}
-        maxWidth="xl"
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-slate-500">Student submissions awaiting review and marking:</p>
-          {loadingGradingAssignmentId ? (
-            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600" role="status" aria-live="polite">Loading enrolled student submissions…</div>
-          ) : gradingError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert"><p className="text-sm font-semibold text-rose-900">Submissions could not load</p><p className="mt-1 text-xs text-rose-800">{gradingError}</p><Button size="sm" className="mt-3" onClick={() => activeAssignmentForGrading && void handleOpenGradingDesk(activeAssignmentForGrading)}>Try again</Button></div>
-          ) : gradingSubmissions.filter(st => st.isSubmitted && st.submission).length === 0 ? (
-            <EmptyState icon={<FileText className="h-6 w-6" />} title="No submissions yet" description="Students have not submitted work for this assignment." />
-          ) : (
-          <div className="divide-y divide-slate-100">
-            {gradingSubmissions.filter(st => st.isSubmitted && st.submission).map(st => (
-              <div key={st.studentId} className="py-3 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-bold text-navy-900">{st.studentName}</p>
-                  <p className="text-[10px] text-slate-400 font-mono">{st.studentRollNo}</p>
-                  {st.submission?.textAnswer && (
-                    <p className="text-[11px] text-slate-600 mt-1 italic line-clamp-1">"{st.submission.textAnswer}"</p>
-                  )}
-                </div>
+      {/* TEACHER GRADING DESK */}
+      <GradingDesk assignment={gradingAssignment} onClose={() => setGradingAssignment(null)} onGraded={() => { void refreshAssignments(); setGradebookReload(key => key + 1); }} />
 
-                <div className="flex items-center gap-2">
-                  {st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? (
-                    <span className="text-xs font-bold text-emerald-600">{st.submission.marksObtained} / {activeAssignmentForGrading?.maxMarks} pts</span>
-                  ) : <span className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Needs grading</span>}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedSubForGrading(st.submission);
-                      setGradingFieldError('');
-                      setGradingMarksInput(st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? String(st.submission.marksObtained) : '');
-                      setGradingFeedbackInput(st.submission?.feedback || '');
-                    }}
-                  >
-                    {st.submission?.marksObtained !== null && st.submission?.marksObtained !== undefined ? 'Edit grade' : 'Grade'}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-          )}
-
-          {selectedSubForGrading && (
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 mt-4">
-              <h4 className="text-xs font-bold text-navy-900 uppercase">Award Marks</h4>
-              {selectedSubForGrading.textAnswer && (
-                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Student answer</p>
-                  <p className="whitespace-pre-wrap">{selectedSubForGrading.textAnswer}</p>
-                  {selectedSubForGrading.isLate && <p className="mt-2 font-semibold text-amber-700">Submitted late</p>}
-                </div>
-              )}
-              <Input
-                label={`Marks (0 - ${activeAssignmentForGrading?.maxMarks})`}
-                type="number"
-                min={0}
-                max={activeAssignmentForGrading?.maxMarks}
-                step="0.5"
-                value={gradingMarksInput}
-                error={gradingFieldError || undefined}
-                onChange={e => { setGradingMarksInput(e.target.value); setGradingFieldError(''); }}
-              />
-              <Input
-                label="Instructor Feedback"
-                value={gradingFeedbackInput}
-                onChange={e => setGradingFeedbackInput(e.target.value)}
-              />
-              <Button size="sm" variant="gold" isLoading={savingGrade} onClick={() => handleSaveGrade(selectedSubForGrading.id)}>
-                Save Grade & Feedback
-              </Button>
-            </div>
-          )}
-        </div>
-      </Modal>
+      {/* QUIZ TOOLS (teacher) */}
+      <QuizBuilderModal isOpen={quizBuilderOpen} courseId={courseId || ''} onClose={() => setQuizBuilderOpen(false)} onCreated={() => void refreshQuizzes()} />
+      <QuizResultsModal quiz={resultsQuiz} onClose={() => setResultsQuiz(null)} onChanged={() => { void refreshQuizzes(); setGradebookReload(key => key + 1); }} />
 
       {/* CSV ENROLL MODAL */}
       <Modal

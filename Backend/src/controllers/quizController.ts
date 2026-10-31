@@ -4,9 +4,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { mockDb } from '../repositories/mockDb.js';
-import { notFound, forbidden, conflict, badRequest } from '../utils/errors.js';
+import { notFound, forbidden, conflict, badRequest, unprocessable } from '../utils/errors.js';
 import { Quiz, QuizQuestion, QuizAttempt } from '../types/index.js';
 import { isSupabaseConfigured, supabaseAdmin } from '../config/index.js';
+import { recordAudit } from '../utils/audit.js';
 
 export const listCourseQuizzes = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -29,15 +30,17 @@ export const listCourseQuizzes = async (req: Request, res: Response, next: NextF
         supabaseAdmin.from('quiz_questions').select('quiz_id,marks').in('quiz_id', quizIds.length ? quizIds : ['00000000-0000-0000-0000-000000000000']),
         user.role === 'student'
           ? supabaseAdmin.from('quiz_attempts').select('id,quiz_id,student_id,started_at,submitted_at,answers,score').in('quiz_id', quizIds.length ? quizIds : ['00000000-0000-0000-0000-000000000000']).eq('student_id', user.id)
-          : Promise.resolve({ data: [], error: null })
+          : supabaseAdmin.from('quiz_attempts').select('id,quiz_id').in('quiz_id', quizIds.length ? quizIds : ['00000000-0000-0000-0000-000000000000'])
       ]);
       if (questionError) throw questionError;
       if (attemptError) throw attemptError;
       const now = Date.now();
       return res.status(200).json({ data: (rows || []).map(row => {
         const quizQuestions = (questions || []).filter(question => question.quiz_id === row.id);
-        const attempt = (attempts || []).find(item => item.quiz_id === row.id);
+        const attempt = user.role === 'student' ? (attempts || []).find((item: any) => item.quiz_id === row.id) as any : undefined;
+        const attemptsCount = user.role === 'student' ? undefined : (attempts || []).filter((item: any) => item.quiz_id === row.id).length;
         return {
+          attemptsCount,
           id: row.id, courseId: row.course_id, createdBy: row.created_by, title: row.title,
           description: row.description, timeLimitMinutes: row.time_limit_minutes,
           opensAt: row.opens_at, closesAt: row.closes_at, isPublished: row.is_published,
@@ -79,6 +82,7 @@ export const listCourseQuizzes = async (req: Request, res: Response, next: NextF
 
       return {
         ...q,
+        attemptsCount: user.role === 'student' ? undefined : mockDb.quizAttempts.filter(qa => qa.quizId === q.id).length,
         status,
         questionsCount: questions.length,
         totalMarks,
@@ -442,13 +446,19 @@ export const getQuizResultsForTeacher = async (req: Request, res: Response, next
       if (teacherError) throw teacherError;
       if (user.role !== 'admin' && !teacherLink) return next(forbidden('Only instructors can review quiz results'));
       const [{ data: attempts, error: attemptsError }, { data: questions, error: questionsError }] = await Promise.all([
-        supabaseAdmin.from('quiz_attempts').select('id,student_id,score,started_at,submitted_at,profiles(full_name,roll_no)').eq('quiz_id', id).order('submitted_at', { ascending: false }),
-        supabaseAdmin.from('quiz_questions').select('marks').eq('quiz_id', id)
+        supabaseAdmin.from('quiz_attempts').select('id,student_id,score,started_at,submitted_at,answers,profiles(full_name,roll_no)').eq('quiz_id', id).order('submitted_at', { ascending: false }),
+        supabaseAdmin.from('quiz_questions').select('id,position,type,prompt,options,marks').eq('quiz_id', id).order('position')
       ]);
       if (attemptsError) throw attemptsError;
       if (questionsError) throw questionsError;
+      const { data: answerRows, error: answersError } = (questions || []).length
+        ? await supabaseAdmin.from('quiz_answers').select('question_id,correct_option_ids').in('question_id', (questions || []).map(question => question.id))
+        : { data: [], error: null };
+      if (answersError) throw answersError;
+      const correctByQuestion = new Map((answerRows || []).map((row: any) => [row.question_id, row.correct_option_ids]));
+      const reviewQuestions = (questions || []).map((question: any) => ({ id: question.id, position: question.position, type: question.type, prompt: question.prompt, options: question.options, marks: Number(question.marks), correctOptionIds: correctByQuestion.get(question.id) || [] }));
       const totalMarks = (questions || []).reduce((sum, question) => sum + Number(question.marks), 0);
-      return res.status(200).json({ data: { quiz: { id: quiz.id, courseId: quiz.course_id, createdBy: quiz.created_by, title: quiz.title, description: quiz.description, timeLimitMinutes: quiz.time_limit_minutes, opensAt: quiz.opens_at, closesAt: quiz.closes_at, isPublished: quiz.is_published, createdAt: quiz.created_at, updatedAt: quiz.updated_at }, results: (attempts || []).map((attempt: any) => ({ attemptId: attempt.id, studentId: attempt.student_id, studentName: attempt.profiles?.full_name || 'Student', studentRollNo: attempt.profiles?.roll_no || '', score: attempt.score === null ? null : Number(attempt.score), totalMarks, startedAt: attempt.started_at, submittedAt: attempt.submitted_at })) } });
+      return res.status(200).json({ data: { quiz: { id: quiz.id, courseId: quiz.course_id, createdBy: quiz.created_by, title: quiz.title, description: quiz.description, timeLimitMinutes: quiz.time_limit_minutes, opensAt: quiz.opens_at, closesAt: quiz.closes_at, isPublished: quiz.is_published, createdAt: quiz.created_at, updatedAt: quiz.updated_at }, questions: reviewQuestions, results: (attempts || []).map((attempt: any) => ({ attemptId: attempt.id, studentId: attempt.student_id, studentName: attempt.profiles?.full_name || 'Student', studentRollNo: attempt.profiles?.roll_no || '', score: attempt.score === null ? null : Number(attempt.score), totalMarks, startedAt: attempt.started_at, submittedAt: attempt.submitted_at, answers: attempt.answers || {} })) } });
     }
 
     const quiz = mockDb.quizzes.find(q => q.id === id);
@@ -463,9 +473,15 @@ export const getQuizResultsForTeacher = async (req: Request, res: Response, next
     const questions = mockDb.quizQuestions.filter(qq => qq.quizId === id);
     const totalMarks = questions.reduce((sum, qq) => sum + qq.marks, 0);
 
+    const reviewQuestions = questions.slice().sort((a, b) => a.position - b.position).map(qq => ({
+      id: qq.id, position: qq.position, type: qq.type, prompt: qq.prompt, options: qq.options, marks: qq.marks,
+      correctOptionIds: mockDb.quizAnswers.find(a => a.questionId === qq.id)?.correctOptionIds || []
+    }));
+
     const results = attempts.map(qa => {
       const student = mockDb.profiles.find(p => p.id === qa.studentId);
       return {
+        answers: qa.answers || {},
         attemptId: qa.id,
         studentId: qa.studentId,
         studentName: student?.fullName || 'Student',
@@ -480,9 +496,62 @@ export const getQuizResultsForTeacher = async (req: Request, res: Response, next
     return res.status(200).json({
       data: {
         quiz,
+        questions: reviewQuestions,
         results
       }
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Teacher / admin override of a student's quiz score (partial credit, appeals, corrections).
+export const setQuizAttemptScore = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id, attemptId } = req.params; // quizId, attemptId
+    const user = req.user;
+    if (!user || (user.role !== 'teacher' && user.role !== 'admin')) return next(forbidden('Only instructors can change quiz scores'));
+    const score = Number(req.body.score);
+    const live = Boolean(isSupabaseConfigured()) && user.isDemoUser !== true;
+
+    if (live) {
+      const { data: quiz, error } = await supabaseAdmin.from('quizzes').select('id,course_id,title').eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (!quiz) return next(notFound('Quiz not found'));
+      if (user.role !== 'admin') {
+        const { data: link, error: linkError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', quiz.course_id).eq('teacher_id', user.id).maybeSingle();
+        if (linkError) throw linkError;
+        if (!link) return next(forbidden('Only instructors of this course can change quiz scores'));
+      }
+      const [{ data: attempt, error: attemptError }, { data: questions, error: questionsError }] = await Promise.all([
+        supabaseAdmin.from('quiz_attempts').select('id,quiz_id,student_id,score,submitted_at').eq('id', attemptId).eq('quiz_id', id).maybeSingle(),
+        supabaseAdmin.from('quiz_questions').select('marks').eq('quiz_id', id)
+      ]);
+      if (attemptError) throw attemptError;
+      if (questionsError) throw questionsError;
+      if (!attempt) return next(notFound('Quiz attempt not found'));
+      if (!attempt.submitted_at) return next(conflict('This attempt has not been submitted yet, so it cannot be scored.'));
+      const totalMarks = (questions || []).reduce((sum, question) => sum + Number(question.marks), 0);
+      if (score > totalMarks) return next(unprocessable(`Score ${score} cannot exceed the quiz total of ${totalMarks}.`));
+      const { error: updateError } = await supabaseAdmin.from('quiz_attempts').update({ score }).eq('id', attemptId);
+      if (updateError) throw updateError;
+      await recordAudit({ actorId: user.id, action: 'grade.quiz', entity: 'quiz_attempt', entityId: attemptId, live: true, metadata: { quiz: quiz.title, studentId: attempt.student_id, previousScore: attempt.score === null ? null : Number(attempt.score), score, totalMarks, note: req.body.note || null } });
+      return res.status(200).json({ data: { attemptId, score, totalMarks } });
+    }
+
+    const quiz = mockDb.quizzes.find(q => q.id === id);
+    if (!quiz) return next(notFound('Quiz not found'));
+    if (user.role !== 'admin' && !mockDb.courseTeachers.some(ct => ct.courseId === quiz.courseId && ct.teacherId === user.id)) {
+      return next(forbidden('Only instructors of this course can change quiz scores'));
+    }
+    const attempt = mockDb.quizAttempts.find(qa => qa.id === attemptId && qa.quizId === id);
+    if (!attempt) return next(notFound('Quiz attempt not found'));
+    if (!attempt.submittedAt) return next(conflict('This attempt has not been submitted yet, so it cannot be scored.'));
+    const totalMarks = mockDb.quizQuestions.filter(qq => qq.quizId === id).reduce((sum, qq) => sum + qq.marks, 0);
+    if (score > totalMarks) return next(unprocessable(`Score ${score} cannot exceed the quiz total of ${totalMarks}.`));
+    await recordAudit({ actorId: user.id, action: 'grade.quiz', entity: 'quiz_attempt', entityId: attemptId, live: false, metadata: { quiz: quiz.title, studentId: attempt.studentId, previousScore: attempt.score, score, totalMarks, note: req.body.note || null } });
+    attempt.score = score;
+    return res.status(200).json({ data: { attemptId, score, totalMarks } });
   } catch (err) {
     next(err);
   }

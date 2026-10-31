@@ -165,7 +165,10 @@ export const getStudentMarks = async (req: Request, res: Response, next: NextFun
   }
 };
 
-export const getCourseGradebook = async (req: Request, res: Response, next: NextFunction) => {
+type Gradebook = { course: { id: string; code: string; title: string }; columns: Array<{ id: string; title: string; kind: string; maxMarks: number }>; rows: Array<{ studentId: string; studentName: string; studentRollNo: string | null; grades: Record<string, { obtained: number | null; max: number; status: string }>; totalObtained: number; totalMax: number; percentage: number }> };
+
+// Shared by the on-screen gradebook and the CSV export. Calls next() itself on failure and then returns nothing.
+const buildGradebook = async (req: Request, next: NextFunction): Promise<Gradebook | void> => {
   try {
     const { id } = req.params; // courseId
     const user = req.user;
@@ -212,7 +215,8 @@ export const getCourseGradebook = async (req: Request, res: Response, next: Next
         }
         return { studentId: student.id, studentName: student.full_name, studentRollNo: student.roll_no, grades, totalObtained, totalMax, percentage: totalMax ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0 };
       });
-      return res.status(200).json({ data: { course, columns, rows } });
+      rows.sort((x: any, y: any) => String(x.studentName).localeCompare(String(y.studentName)));
+      return { course, columns, rows } as Gradebook;
     }
 
     const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
@@ -286,92 +290,56 @@ export const getCourseGradebook = async (req: Request, res: Response, next: Next
       };
     });
 
-    return res.status(200).json({
-      data: {
-        course: { id: course.id, code: course.code, title: course.title },
-        columns,
-        rows
-      }
-    });
+    rows.sort((x, y) => x.studentName.localeCompare(y.studentName));
+    return { course: { id: course.id, code: course.code, title: course.title }, columns, rows } as Gradebook;
   } catch (err) {
     next(err);
   }
 };
 
+export const getCourseGradebook = async (req: Request, res: Response, next: NextFunction) => {
+  const data = await buildGradebook(req, next);
+  if (!data) return;
+  return res.status(200).json({ data });
+};
+
+// One safe CSV cell: always quoted, quotes doubled, and spreadsheet formulas neutralised.
+const csvCell = (value: unknown) => {
+  const text = String(value ?? '');
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
 export const exportGradebookCsv = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
-    const user = req.user;
-    if (!user) return next(forbidden());
-
-    const isTeacher = mockDb.courseTeachers.some(ct => ct.courseId === id && ct.teacherId === user.id);
-    if (user.role !== 'admin' && !isTeacher) {
-      return next(forbidden('Permission denied'));
+    const data = await buildGradebook(req, next);
+    if (!data) return;
+    const emailById = new Map<string, string>();
+    const studentIds = data.rows.map(row => row.studentId);
+    if (isSupabaseConfigured() && req.user?.isDemoUser !== true && studentIds.length) {
+      const { data: people, error } = await supabaseAdmin.from('profiles').select('id,email').in('id', studentIds);
+      if (error) throw error;
+      (people || []).forEach(person => emailById.set(person.id, person.email));
+    } else {
+      mockDb.profiles.forEach(person => emailById.set(person.id, person.email));
     }
 
-    const course = mockDb.courses.find(c => c.id === id);
-    if (!course) return next(notFound('Course not found'));
-
-    const assignments = mockDb.assignments.filter(a => a.courseId === id);
-    const quizzes = mockDb.quizzes.filter(q => q.courseId === id);
-
-    const headers = ['Student Name', 'Roll Number', 'Email'];
-    assignments.forEach(a => headers.push(`"${a.title} (Max ${a.maxMarks})"`.replace(/"/g, '""')));
-    quizzes.forEach(q => headers.push(`"${q.title} (Quiz)"`.replace(/"/g, '""')));
-    headers.push('Total Obtained', 'Total Max', 'Percentage (%)');
-
-    const csvLines = [headers.join(',')];
-
-    const studentIds = mockDb.enrollments.filter(e => e.courseId === id).map(e => e.studentId);
-    const students = mockDb.profiles.filter(p => studentIds.includes(p.id));
-
-    for (const student of students) {
-      const row: string[] = [
-        `"${student.fullName}"`,
-        `"${student.rollNo || ''}"`,
-        `"${student.email}"`
-      ];
-
-      let totalObt = 0;
-      let totalMax = 0;
-
-      for (const a of assignments) {
-        const sub = mockDb.submissions.find(s => s.assignmentId === a.id && s.studentId === student.id);
-        if (sub && sub.marksObtained !== null && sub.marksObtained !== undefined) {
-          row.push(sub.marksObtained.toString());
-          totalObt += sub.marksObtained;
-          totalMax += a.maxMarks;
-        } else {
-          row.push('Pending');
-        }
-      }
-
-      for (const q of quizzes) {
-        const attempt = mockDb.quizAttempts.find(qa => qa.quizId === q.id && qa.studentId === student.id);
-        const questions = mockDb.quizQuestions.filter(qq => qq.quizId === q.id);
-        const max = questions.reduce((s, item) => s + item.marks, 0);
-
-        if (attempt && attempt.score !== null && attempt.score !== undefined) {
-          row.push(attempt.score.toString());
-          totalObt += attempt.score;
-          totalMax += max;
-        } else {
-          row.push('Pending');
-        }
-      }
-
-      const pct = totalMax > 0 ? ((totalObt / totalMax) * 100).toFixed(2) : '0.00';
-      row.push(totalObt.toString(), totalMax.toString(), `${pct}%`);
-      csvLines.push(row.join(','));
+    const header = ['Student Name', 'Roll Number', 'Email', ...data.columns.map(c => `${c.title} (${c.kind === 'quiz' ? 'Quiz' : 'Max'} ${c.maxMarks})`), 'Total Obtained', 'Total Max', 'Percentage (%)'];
+    const lines = [header.map(csvCell).join(',')];
+    for (const row of data.rows) {
+      const cells = [row.studentName, row.studentRollNo || '', emailById.get(row.studentId) || '',
+        ...data.columns.map(c => {
+          const grade = row.grades[c.id];
+          return grade && grade.obtained !== null ? String(grade.obtained) : grade?.status === 'submitted' || grade?.status === 'attempted' ? 'Needs grading' : 'Pending';
+        }),
+        String(row.totalObtained), String(row.totalMax), `${row.percentage.toFixed(2)}%`];
+      lines.push(cells.map(csvCell).join(','));
     }
 
-    // Spec Requirement: Must use UTF-8 BOM so Excel opens cleanly
-    const BOM = '\uFEFF';
-    const csvContent = BOM + csvLines.join('\r\n');
-
+    // Spec Requirement: UTF-8 BOM so Excel opens non-ASCII names correctly
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="gradebook_${course.code}.csv"`);
-    return res.status(200).send(csvContent);
+    res.setHeader('Content-Disposition', `attachment; filename="gradebook_${data.course.code}.csv"`);
+    return res.status(200).send('\uFEFF' + lines.join('\r\n'));
   } catch (err) {
     next(err);
   }

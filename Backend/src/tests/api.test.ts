@@ -255,3 +255,74 @@ describe('Profile and recovery', () => {
     expect(reset.status).toBe(422);
   });
 });
+
+describe('Teacher quiz review and mark editing', () => {
+  const QUIZ = 'q0000000-0000-0000-0000-000000000001';
+  const ATTEMPT = 'qa000000-0000-0000-0000-000000000001';
+  const WEB = 'c0000000-0000-0000-0000-000000000002';
+
+  it('shows the course teacher each attempt with the answer key and the student\'s answers', async () => {
+    const res = await request(app).get(`/api/quizzes/${QUIZ}/results`).set('Authorization', TEACHER_WEB);
+    expect(res.status).toBe(200);
+    expect(res.body.data.questions).toHaveLength(3);
+    expect(res.body.data.questions[0].correctOptionIds.length).toBeGreaterThan(0);
+    expect(res.body.data.results[0].answers).toBeDefined();
+    const list = await request(app).get(`/api/courses/${WEB}/quizzes`).set('Authorization', TEACHER_WEB);
+    expect(list.body.data[0].attemptsCount).toBeGreaterThanOrEqual(1);
+    // students must never receive the answer key
+    const asStudent = await request(app).get(`/api/quizzes/${QUIZ}/results`).set('Authorization', STUDENT);
+    expect(asStudent.status).toBe(403);
+  });
+
+  it('lets the teacher edit a quiz score within 0..total, records it, and rejects bad scores and outsiders', async () => {
+    const ok = await request(app).patch(`/api/quizzes/${QUIZ}/attempts/${ATTEMPT}`).set('Authorization', TEACHER_WEB).send({ score: 15, note: 'partial credit' });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data).toMatchObject({ score: 15, totalMarks: 20 });
+    const after = await request(app).get(`/api/quizzes/${QUIZ}/results`).set('Authorization', TEACHER_WEB);
+    expect(after.body.data.results.find((r: { attemptId: string }) => r.attemptId === ATTEMPT).score).toBe(15);
+    const audit = await request(app).get('/api/admin/audit').set('Authorization', ADMIN);
+    expect(audit.body.data.some((row: { action: string }) => row.action === 'grade.quiz')).toBe(true);
+    expect((await request(app).patch(`/api/quizzes/${QUIZ}/attempts/${ATTEMPT}`).set('Authorization', TEACHER_WEB).send({ score: 21 })).status).toBe(422);
+    expect((await request(app).patch(`/api/quizzes/${QUIZ}/attempts/${ATTEMPT}`).set('Authorization', TEACHER_WEB).send({ score: -1 })).status).toBeGreaterThanOrEqual(400);
+    expect((await request(app).patch(`/api/quizzes/${QUIZ}/attempts/${ATTEMPT}`).set('Authorization', TEACHER_OTHER).send({ score: 10 })).status).toBe(403);
+    expect((await request(app).patch(`/api/quizzes/${QUIZ}/attempts/${ATTEMPT}`).set('Authorization', STUDENT).send({ score: 20 })).status).toBe(403);
+    expect((await request(app).patch(`/api/quizzes/${QUIZ}/attempts/nope`).set('Authorization', TEACHER_WEB).send({ score: 5 })).status).toBe(404);
+  });
+
+  it('keeps assignment edits consistent with marks already awarded', async () => {
+    const A1 = 'a1000000-0000-0000-0000-000000000001';
+    const tooLow = await request(app).patch(`/api/assignments/${A1}`).set('Authorization', TEACHER_WEB).send({ maxMarks: 50 });
+    expect(tooLow.status).toBe(422);
+    expect(tooLow.body.error.message).toMatch(/highest mark/i);
+    const fine = await request(app).patch(`/api/assignments/${A1}`).set('Authorization', TEACHER_WEB).send({ title: 'Assignment 1: RESTful API Design (revised)', maxMarks: 100 });
+    expect(fine.status).toBe(200);
+    expect((await request(app).patch(`/api/assignments/${A1}`).set('Authorization', TEACHER_OTHER).send({ title: 'Hijack attempt' })).status).toBe(403);
+  });
+});
+
+describe('Gradebook', () => {
+  const WEB = 'c0000000-0000-0000-0000-000000000002';
+  it('exports a clean, Excel-ready CSV for the course teacher only', async () => {
+    const res = await request(app).get(`/api/courses/${WEB}/gradebook.csv`).set('Authorization', TEACHER_WEB);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    const text = res.text;
+    expect(text.charCodeAt(0)).toBe(0xfeff);
+    const lines = text.slice(1).split('\r\n');
+    expect(lines[0]).toContain('"Student Name","Roll Number","Email"');
+    expect(lines[0]).not.toContain('""Assignment');          // headers must not be double-quoted
+    expect(lines.length).toBeGreaterThanOrEqual(46);          // header + the enrolled students
+    expect(lines.slice(1).every(line => line.split('","').length >= 6)).toBe(true);
+    expect((await request(app).get(`/api/courses/${WEB}/gradebook.csv`).set('Authorization', TEACHER_OTHER)).status).toBe(403);
+    expect((await request(app).get(`/api/courses/${WEB}/gradebook.csv`).set('Authorization', STUDENT)).status).toBe(403);
+    expect((await request(app).get(`/api/courses/${WEB}/gradebook.csv`)).status).toBe(401);
+  });
+
+  it('returns the same gradebook data the screen shows, sorted by name', async () => {
+    const res = await request(app).get(`/api/courses/${WEB}/gradebook`).set('Authorization', TEACHER_WEB);
+    expect(res.status).toBe(200);
+    expect(res.body.data.columns.length).toBeGreaterThanOrEqual(3);
+    const names = res.body.data.rows.map((r: { studentName: string }) => r.studentName);
+    expect(names).toEqual([...names].sort((a: string, b: string) => a.localeCompare(b)));
+  });
+});

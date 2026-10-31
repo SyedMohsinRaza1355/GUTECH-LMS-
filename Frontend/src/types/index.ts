@@ -58,6 +58,7 @@ export interface Assignment {
   createdAt: string;
   updatedAt: string;
   submissionsCount?: number;
+  ungradedCount?: number;
   mySubmission?: Submission | null;
 }
 
@@ -107,6 +108,7 @@ export interface Quiz {
   status?: 'upcoming' | 'active' | 'ended';
   questionsCount?: number;
   totalMarks?: number;
+  attemptsCount?: number;
   myAttempt?: QuizAttempt | null;
 }
 

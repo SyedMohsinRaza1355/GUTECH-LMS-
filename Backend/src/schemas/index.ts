@@ -150,6 +150,11 @@ export const createQuizSchema = z.object({
   questions: z.array(createQuizQuestionSchema).min(1, 'Quiz must have at least one question')
 });
 
+export const quizScoreSchema = z.object({
+  score: z.coerce.number({ invalid_type_error: 'Score must be a number' }).finite().min(0, 'Score must be 0 or higher'),
+  note: z.string().trim().max(500).optional()
+});
+
 export const submitQuizAttemptSchema = z.object({
   answers: z.record(z.string(), z.array(z.string())) // { [questionId]: ['a'] }
 });

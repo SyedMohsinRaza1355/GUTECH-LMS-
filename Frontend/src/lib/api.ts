@@ -258,6 +258,14 @@ class ApiClient {
     });
   }
 
+  async patchAssignment(assignmentId: string, data: Partial<{ title: string; instructions: string; maxMarks: number; dueAt: string; allowLate: boolean }>): Promise<Assignment> {
+    return this.request<Assignment>(`/assignments/${assignmentId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async deleteAssignment(assignmentId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/assignments/${assignmentId}`, { method: 'DELETE' });
+  }
+
   async submitAssignment(assignmentId: string, textAnswer?: string, filePath?: string): Promise<Submission> {
     return this.request<Submission>(`/assignments/${assignmentId}/submission`, {
       method: 'PUT',
@@ -286,6 +294,14 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(quizData)
     });
+  }
+
+  async patchQuiz(quizId: string, data: Partial<{ isPublished: boolean; title: string; description: string; timeLimitMinutes: number; opensAt: string; closesAt: string }>): Promise<Quiz> {
+    return this.request<Quiz>(`/quizzes/${quizId}`, { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  async updateQuizAttemptScore(quizId: string, attemptId: string, score: number, note?: string): Promise<{ attemptId: string; score: number; totalMarks: number }> {
+    return this.request(`/quizzes/${quizId}/attempts/${attemptId}`, { method: 'PATCH', body: JSON.stringify({ score, note }) });
   }
 
   async startQuizAttempt(quizId: string): Promise<{ attemptId: string; startedAt: string; expiresAt: string; timeLimitMinutes: number; questions: any[] }> {
@@ -337,6 +353,31 @@ class ApiClient {
 
   async getPendingTasks(): Promise<PendingTask[]> {
     return this.request<PendingTask[]>('/me/tasks');
+  }
+
+  /** Downloads the gradebook as a CSV. A plain link cannot send the login token, so fetch it and save the blob. */
+  async downloadGradebookCsv(courseId: string): Promise<void> {
+    const token = this.getToken();
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/courses/${courseId}/gradebook.csv`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    } catch {
+      throw new Error('Cannot reach the server. Check your internet connection and try again.');
+    }
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new Error(json?.error?.message || `Download failed with status ${response.status}`);
+    }
+    const blob = await response.blob();
+    const name = /filename="?([^";]+)"?/i.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'gradebook.csv';
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async getCourseGradebook(courseId: string): Promise<{ course: any; columns: any[]; rows: any[] }> {

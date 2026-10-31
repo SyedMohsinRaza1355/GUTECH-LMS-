@@ -18,7 +18,7 @@ A role-based Learning Management System for **Ghazali University of Technology (
 
 **Students** - enrolled courses, assignments with timezone-aware due labels (overdue / due soon / done), submit and edit a submission before it is graded, timed quizzes (single choice, multi choice, true/false, auto-graded, resumable after a refresh), marks and GPA view, pending-work list.
 
-**Teachers** - assigned classes, **grading queue** with "Grade now" jump links, create assignments, upload resources (PDF, Word, PowerPoint, images, ZIP up to 25 MB), grading desk with marks and feedback, gradebook with CSV export, real class roster, class announcements.
+**Teachers** - assigned classes, **grading queue** with "Grade now" jump links, a grading desk where each student's marks form opens under their row (filters, search, "Save & next", edit any mark later), create / edit / delete assignments, upload resources (PDF, Word, PowerPoint, images, ZIP up to 25 MB), **quiz builder** (single, multi, true/false) with publish/unpublish, quiz results with the answer key and editable scores, a live gradebook with authenticated CSV export, real class roster, class announcements.
 
 **Admins** - user directory with search, role filters and paging; guided **new user** form (username suggestion, automatic roll number, generated password, course enrolment); activate / deactivate; course create / edit / delete; bulk CSV enrolment and unenrol; complaint resolution; **audit history** of grades and account changes.
 

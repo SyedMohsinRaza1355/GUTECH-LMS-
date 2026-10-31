@@ -7,6 +7,7 @@ import { mockDb } from '../repositories/mockDb.js';
 import { supabaseAdmin, supabaseAnon, config, isSupabaseConfigured } from '../config/index.js';
 import { conflict, notFound, unprocessable } from '../utils/errors.js';
 import { recordAudit, listAudit } from '../utils/audit.js';
+import { clearSessionCache } from '../middleware/auth.js';
 import { UserProfile } from '../types/index.js';
 
 const liveRequest = (req: Request): boolean => Boolean(isSupabaseConfigured()) && (req as any).user?.isDemoUser !== true;
@@ -187,6 +188,7 @@ export const patchUser = async (req: Request, res: Response, next: NextFunction)
         });
         if (authError) throw authError;
       }
+      clearSessionCache(id);
       await recordAudit({ actorId: req.user!.id, action: isActive === undefined ? 'user.update' : isActive ? 'user.activate' : 'user.deactivate', entity: 'profile', entityId: id, live, metadata: { email: data.email, changes: Object.keys(update).filter(key => key !== 'updated_at') } });
       return res.status(200).json({ data: profileFromRow(data) });
     }

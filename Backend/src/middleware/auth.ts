@@ -18,6 +18,26 @@ declare global {
   }
 }
 
+// Verifying a session costs two round trips to Supabase (token check, profile). Run them in
+// parallel and remember the result for a few seconds so a page that fires several requests
+// does not pay for it each time. Deactivation/role changes call clearSessionCache().
+const SESSION_TTL_MS = 15_000;
+const sessionCache = new Map<string, { user: AuthUser; expires: number }>();
+
+export const clearSessionCache = (userId?: string) => {
+  if (!userId) { sessionCache.clear(); return; }
+  for (const [token, entry] of sessionCache) if (entry.user.id === userId) sessionCache.delete(token);
+};
+
+const subjectOf = (token: string): string | null => {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'));
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch {
+    return null;
+  }
+};
+
 export const requireAuth = async (req: Request, _res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
@@ -47,20 +67,28 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
 
     // Live Supabase Auth verification
     if (isSupabaseConfigured()) {
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-      if (error || !user) {
+      const cached = sessionCache.get(token);
+      if (cached && cached.expires > Date.now()) {
+        req.user = cached.user;
+        return next();
+      }
+
+      const subject = subjectOf(token);
+      const [authResult, guessedProfile] = await Promise.all([
+        supabaseAdmin.auth.getUser(token),
+        subject ? supabaseAdmin.from('profiles').select('id, role, full_name, is_active').eq('id', subject).maybeSingle() : Promise.resolve(null)
+      ]);
+      const user = authResult.data?.user;
+      if (authResult.error || !user) {
         return next(unauthorized('Invalid or expired authentication session'));
       }
 
-      // Fetch profile and check active status
-      const { data: profile, error: profileErr } = await supabaseAdmin
-        .from('profiles')
-        .select('id, role, full_name, is_active')
-        .eq('id', user.id)
-        .single();
-
-      if (profileErr || !profile) {
-        return next(unauthorized('User profile could not be loaded'));
+      // The profile was fetched speculatively by the token's subject; only trust it if Supabase confirmed that subject.
+      let profile: any = guessedProfile && !guessedProfile.error && guessedProfile.data && guessedProfile.data.id === user.id ? guessedProfile.data : null;
+      if (!profile) {
+        const { data, error: profileErr } = await supabaseAdmin.from('profiles').select('id, role, full_name, is_active').eq('id', user.id).single();
+        if (profileErr || !data) return next(unauthorized('User profile could not be loaded'));
+        profile = data;
       }
 
       if (!profile.is_active) {
@@ -73,6 +101,8 @@ export const requireAuth = async (req: Request, _res: Response, next: NextFuncti
         email: user.email || '',
         fullName: profile.full_name
       };
+      if (sessionCache.size > 500) sessionCache.clear();
+      sessionCache.set(token, { user: req.user, expires: Date.now() + SESSION_TTL_MS });
       return next();
     }
 

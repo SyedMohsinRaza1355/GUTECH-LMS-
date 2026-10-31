@@ -339,21 +339,20 @@ export const getMyCourses = async (req: Request, res: Response, next: NextFuncti
     if (!user) return next(forbidden());
 
     if (liveRequest(req)) {
-      let ids: string[] | null = null;
-      if (user.role === 'teacher') {
-        const { data, error } = await supabaseAdmin.from('course_teachers').select('course_id').eq('teacher_id', user.id);
+      let courses: any[];
+      if (user.role === 'admin') {
+        const { data, error } = await supabaseAdmin.from('courses').select('*').eq('is_archived', false).order('code');
         if (error) throw error;
-        ids = (data || []).map(row => row.course_id);
-      } else if (user.role === 'student') {
-        const { data, error } = await supabaseAdmin.from('enrollments').select('course_id').eq('student_id', user.id);
+        courses = data || [];
+      } else {
+        // One query: the user's memberships with each course embedded (instead of ids first, then courses).
+        const table = user.role === 'teacher' ? 'course_teachers' : 'enrollments';
+        const owner = user.role === 'teacher' ? 'teacher_id' : 'student_id';
+        const { data, error } = await supabaseAdmin.from(table).select('course_id, courses(*)').eq(owner, user.id);
         if (error) throw error;
-        ids = (data || []).map(row => row.course_id);
+        courses = (data || []).map((row: any) => row.courses).filter((course: any) => course && !course.is_archived).sort((a: any, b: any) => String(a.code).localeCompare(String(b.code)));
       }
-      let query = supabaseAdmin.from('courses').select('*').eq('is_archived', false);
-      if (ids) query = ids.length ? query.in('id', ids) : query.eq('id', '00000000-0000-0000-0000-000000000000');
-      const { data, error } = await query.order('code');
-      if (error) throw error;
-      return res.status(200).json({ data: await enrichLiveCourses(data || []) });
+      return res.status(200).json({ data: await enrichLiveCourses(courses) });
     }
 
     let userCourses: Course[] = [];

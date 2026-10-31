@@ -37,6 +37,7 @@ export const listAssignments = async (req: Request, res: Response, next: NextFun
           instructions: row.instructions, maxMarks: Number(row.max_marks), dueAt: row.due_at,
           allowLate: row.allow_late, attachmentPath: row.attachment_path,
           createdAt: row.created_at, updatedAt: row.updated_at, submissionsCount: related.length,
+          ungradedCount: user.role === 'student' ? undefined : related.filter(submission => submission.marks_obtained === null).length,
           mySubmission: mine ? { id: mine.id, assignmentId: mine.assignment_id, studentId: mine.student_id, textAnswer: mine.text_answer, filePath: mine.file_path, submittedAt: mine.submitted_at, isLate: mine.is_late, marksObtained: mine.marks_obtained === null ? null : Number(mine.marks_obtained), feedback: mine.feedback, gradedBy: mine.graded_by, gradedAt: mine.graded_at } : null
         };
       }) });
@@ -58,6 +59,7 @@ export const listAssignments = async (req: Request, res: Response, next: NextFun
       return {
         ...a,
         submissionsCount: submissions.length,
+        ungradedCount: user.role === 'student' ? undefined : submissions.filter(s => s.marksObtained === null || s.marksObtained === undefined).length,
         mySubmission: mySubmission || null
       };
     });
@@ -123,8 +125,17 @@ export const patchAssignment = async (req: Request, res: Response, next: NextFun
       const { data: assignment, error } = await supabaseAdmin.from('assignments').select('*').eq('id', id).maybeSingle();
       if (error) throw error;
       if (!assignment) return next(notFound('Assignment not found'));
-      if (user.role !== 'admin' && assignment.created_by !== user.id) return next(forbidden('Only the creator of this assignment can modify it'));
+      if (user.role !== 'admin') {
+        const { data: link, error: linkError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', assignment.course_id).eq('teacher_id', user.id).maybeSingle();
+        if (linkError) throw linkError;
+        if (!link) return next(forbidden('Only instructors of this course can modify this assignment'));
+      }
       const { title, instructions, maxMarks, dueAt, allowLate, attachmentPath } = req.body;
+      if (maxMarks !== undefined) {
+        const { data: top, error: topError } = await supabaseAdmin.from('submissions').select('marks_obtained').eq('assignment_id', id).not('marks_obtained', 'is', null).order('marks_obtained', { ascending: false }).limit(1).maybeSingle();
+        if (topError) throw topError;
+        if (top && Number(top.marks_obtained) > Number(maxMarks)) return next(unprocessable(`Maximum marks cannot be lower than the highest mark already awarded (${Number(top.marks_obtained)}).`));
+      }
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (title !== undefined) update.title = title;
       if (instructions !== undefined) update.instructions = instructions;
@@ -134,23 +145,31 @@ export const patchAssignment = async (req: Request, res: Response, next: NextFun
       if (attachmentPath !== undefined) update.attachment_path = attachmentPath;
       const { data, error: updateError } = await supabaseAdmin.from('assignments').update(update).eq('id', id).select().single();
       if (updateError) throw updateError;
+      await recordAudit({ actorId: user.id, action: 'assignment.update', entity: 'assignment', entityId: id, live: true, metadata: { title: data.title, changes: Object.keys(update).filter(key => key !== 'updated_at') } });
       return res.status(200).json({ data: { id: data.id, courseId: data.course_id, createdBy: data.created_by, title: data.title, instructions: data.instructions, maxMarks: Number(data.max_marks), dueAt: data.due_at, allowLate: data.allow_late, attachmentPath: data.attachment_path, createdAt: data.created_at, updatedAt: data.updated_at } });
     }
 
     const assignment = mockDb.assignments.find(a => a.id === id);
     if (!assignment) return next(notFound('Assignment not found'));
 
-    if (user.role !== 'admin' && assignment.createdBy !== user.id) {
-      return next(forbidden('Only the creator of this assignment can modify it'));
+    if (user.role !== 'admin' && !mockDb.courseTeachers.some(ct => ct.courseId === assignment.courseId && ct.teacherId === user.id)) {
+      return next(forbidden('Only instructors of this course can modify this assignment'));
     }
 
     const { title, instructions, maxMarks, dueAt, allowLate } = req.body;
+    if (maxMarks !== undefined) {
+      const awarded = mockDb.submissions.filter(sub => sub.assignmentId === id && sub.marksObtained !== null && sub.marksObtained !== undefined).map(sub => Number(sub.marksObtained));
+      if (awarded.length && Math.max(...awarded) > Number(maxMarks)) {
+        return next(unprocessable(`Maximum marks cannot be lower than the highest mark already awarded (${Math.max(...awarded)}).`));
+      }
+    }
     if (title) assignment.title = title;
     if (instructions) assignment.instructions = instructions;
     if (maxMarks) assignment.maxMarks = maxMarks;
     if (dueAt) assignment.dueAt = dueAt;
     if (allowLate !== undefined) assignment.allowLate = allowLate;
     assignment.updatedAt = new Date().toISOString();
+    await recordAudit({ actorId: user.id, action: 'assignment.update', entity: 'assignment', entityId: id, live: false, metadata: { title: assignment.title } });
 
     return res.status(200).json({ data: assignment });
   } catch (err) {
@@ -168,7 +187,12 @@ export const deleteAssignment = async (req: Request, res: Response, next: NextFu
       const { data: assignment, error } = await supabaseAdmin.from('assignments').select('id,course_id,created_by').eq('id', id).maybeSingle();
       if (error) throw error;
       if (!assignment) return next(notFound('Assignment not found'));
-      if (user.role !== 'admin' && assignment.created_by !== user.id) return next(forbidden('Only the creator or an admin can delete this assignment'));
+      if (user.role !== 'admin') {
+        const { data: link, error: linkError } = await supabaseAdmin.from('course_teachers').select('course_id').eq('course_id', assignment.course_id).eq('teacher_id', user.id).maybeSingle();
+        if (linkError) throw linkError;
+        if (!link) return next(forbidden('Only instructors of this course or an admin can delete this assignment'));
+      }
+      await recordAudit({ actorId: user.id, action: 'assignment.delete', entity: 'assignment', entityId: id, live: true, metadata: { courseId: assignment.course_id } });
       const { error: deleteError } = await supabaseAdmin.from('assignments').delete().eq('id', id);
       if (deleteError) throw deleteError;
       return res.status(200).json({ data: { message: 'Assignment deleted successfully' } });
@@ -178,9 +202,10 @@ export const deleteAssignment = async (req: Request, res: Response, next: NextFu
     if (index === -1) return next(notFound('Assignment not found'));
 
     const assignment = mockDb.assignments[index];
-    if (user.role !== 'admin' && assignment.createdBy !== user.id) {
-      return next(forbidden('Only the creator or an admin can delete this assignment'));
+    if (user.role !== 'admin' && !mockDb.courseTeachers.some(ct => ct.courseId === assignment.courseId && ct.teacherId === user.id)) {
+      return next(forbidden('Only instructors of this course or an admin can delete this assignment'));
     }
+    await recordAudit({ actorId: user.id, action: 'assignment.delete', entity: 'assignment', entityId: id, live: false, metadata: { title: assignment.title } });
 
     mockDb.assignments.splice(index, 1);
     mockDb.submissions = mockDb.submissions.filter(s => s.assignmentId !== id);
