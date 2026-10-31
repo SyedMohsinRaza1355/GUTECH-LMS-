@@ -34,7 +34,8 @@ The project was extended in a second session with Claude Code, again as a pair p
 - **Teacher workflow:** grading queue page and API with deep links into the grading desk; dashboard tiles that lead to the work; mark validation and per-action feedback.
 - **Admin workflow:** guided new-user form with automatic roll number and course enrolment; audit history for grades and account changes.
 - **Tester pass:** drove the app as student, teacher and admin in the browser and through the API. It found, and the work then fixed, dead "Create Assignment" and "Upload Resource" buttons, a hard-coded fake student roster, a change-password endpoint that always reported success, multi-select quiz questions that could never score, silent failures, and announcements and chat that were not stored in Supabase.
-- **Verification:** 24 automated API tests, TypeScript and production builds, live API checks against Supabase (login, data, role guards, create/read/update/delete for each module), and browser checks at desktop and phone width.
+- **Teacher tools (final round):** found why teachers "could not edit or grade" (the marks form opened thousands of pixels off-screen and quizzes had no teacher UI), then built an inline grading desk, assignment edit/delete, a quiz builder, quiz results with editable scores, and a real gradebook with authenticated CSV export.
+- **Verification:** 31 automated API tests, a 45-check edge-case sweep, a 60-check live run against Supabase, TypeScript and production builds, live API checks against Supabase (login, data, role guards, create/read/update/delete for each module), and browser checks at desktop and phone width.
 - **Human decisions:** which features to build, security-sensitive actions (key rotation, deleting accounts, deploys) were approved by the developer, and secrets were never committed.
 
 ## Suggested evidence to include with the class submission
