@@ -193,7 +193,7 @@ export const DashboardPage: React.FC = () => {
             </StatTile>
             <StatTile to="/courses" label="Open your classes to see enrolled students">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center"><Users className="w-6 h-6" /></div>
-              <div><p className="text-xs font-semibold text-slate-400">Total Students</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : courses.reduce((count, course) => count + (course.studentsCount || 0), 0)}</p></div>
+              <div><p className="text-xs font-semibold text-slate-400">Total Students</p><p className="text-xl font-extrabold text-navy-950 mt-0.5">{loading ? '—' : gradingQueue?.summary.students ?? courses.reduce((count, course) => count + (course.studentsCount || 0), 0)}</p></div>
             </StatTile>
             <StatTile to="/announcements" label={`View ${announcementCount} announcements`}>
               <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center"><Bell className="w-6 h-6" /></div>

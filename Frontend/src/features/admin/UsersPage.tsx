@@ -47,7 +47,10 @@ const actionLabels: Record<string, string> = {
   'user.reset-password': 'Password reset requested',
   'user.change-password': 'Password changed',
   'course.unenroll': 'Student unenrolled from a course',
-  'grade.save': 'Grade saved'
+  'grade.save': 'Grade saved',
+  'grade.quiz': 'Quiz score changed',
+  'assignment.update': 'Assignment edited',
+  'assignment.delete': 'Assignment deleted'
 };
 
 export const UsersPage: React.FC = () => {
@@ -515,7 +518,11 @@ export const UsersPage: React.FC = () => {
               const meta = (row.metadata || {}) as Record<string, unknown>;
               const detail = row.action === 'grade.save'
                 ? `${meta.assignment ?? 'Assignment'}: ${meta.previousMarks ?? '—'} → ${meta.marks ?? '—'} / ${meta.maxMarks ?? '—'}`
-                : String(meta.email ?? '');
+                : row.action === 'grade.quiz'
+                  ? `${meta.quiz ?? 'Quiz'}: ${meta.previousScore ?? '—'} → ${meta.score ?? '—'} / ${meta.totalMarks ?? '—'}${meta.note ? ` (${meta.note})` : ''}`
+                  : row.action.startsWith('assignment.')
+                    ? String(meta.title ?? '')
+                    : String(meta.email ?? '');
               return (
                 <li key={row.id} className="flex flex-col gap-0.5 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between">
                   <div>

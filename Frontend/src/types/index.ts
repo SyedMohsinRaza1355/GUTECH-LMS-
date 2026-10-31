@@ -195,7 +195,7 @@ export interface GradingQueueItem {
 
 export interface GradingQueue {
   items: GradingQueueItem[];
-  summary: { ungradedTotal: number; assignmentsToGrade: number; classes: number };
+  summary: { ungradedTotal: number; assignmentsToGrade: number; classes: number; students?: number };
 }
 
 export interface PendingTask {

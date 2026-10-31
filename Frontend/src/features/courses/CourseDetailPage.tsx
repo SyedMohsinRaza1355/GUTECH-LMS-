@@ -685,6 +685,9 @@ export const CourseDetailPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
+            {assignments.length === 0 && (
+              <EmptyState icon={<FileText className="h-6 w-6" />} title="No assignments yet" description={role === 'student' ? 'Assignments your teacher publishes will appear here.' : 'Create the first assignment for this class.'} />
+            )}
             {assignments.map(a => {
               const isPastDue = isDeadlinePassed(a.dueAt);
               const sub = a.mySubmission;

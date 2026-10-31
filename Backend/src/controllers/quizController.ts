@@ -296,7 +296,7 @@ export const startQuizAttempt = async (req: Request, res: Response, next: NextFu
     }
 
     const now = new Date();
-    if (now < new Date(quiz.opensAt) || now > new Date(quiz.closesAt)) {
+    if (!quiz.isPublished || now < new Date(quiz.opensAt) || now > new Date(quiz.closesAt)) {
       return next(conflict('Quiz is not currently open for attempts.'));
     }
 

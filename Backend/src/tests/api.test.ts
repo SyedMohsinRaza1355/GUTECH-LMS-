@@ -326,3 +326,31 @@ describe('Gradebook', () => {
     expect(names).toEqual([...names].sort((a: string, b: string) => a.localeCompare(b)));
   });
 });
+
+describe('Quiz availability', () => {
+  it('does not let a student start a draft quiz, even by calling the endpoint directly', async () => {
+    const sadia = 'Bearer demo-token-t0000000-0000-0000-0000-000000000002';
+    const day = 86400000;
+    const created = await request(app).post('/api/courses/c0000000-0000-0000-0000-000000000003/quizzes').set('Authorization', sadia).send({
+      title: 'Draft only quiz', timeLimitMinutes: 5, opensAt: new Date(Date.now() - day).toISOString(), closesAt: new Date(Date.now() + day).toISOString(), isPublished: false,
+      questions: [{ position: 1, type: 'mcq_single', prompt: 'Pick B', options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], correctOptionIds: ['b'], marks: 2 }]
+    });
+    expect(created.status).toBe(201);
+    const attempt = await request(app).post(`/api/quizzes/${created.body.data.id}/attempt`).set('Authorization', 'Bearer demo-token-s0000000-0000-0000-0000-000000000001');
+    expect(attempt.status).toBe(409);
+    await request(app).patch(`/api/quizzes/${created.body.data.id}`).set('Authorization', sadia).send({ isPublished: true });
+    const open = await request(app).post(`/api/quizzes/${created.body.data.id}/attempt`).set('Authorization', 'Bearer demo-token-s0000000-0000-0000-0000-000000000001');
+    expect(open.status).toBe(200);
+  });
+});
+
+describe('Teacher dashboard counts', () => {
+  it('counts a student once even when they are in several of the teacher\'s classes', async () => {
+    const queue = await request(app).get('/api/me/grading-queue').set('Authorization', TEACHER_WEB);
+    const courses = await request(app).get('/api/me/courses').set('Authorization', TEACHER_WEB);
+    const summed = courses.body.data.reduce((sum: number, c: { studentsCount?: number }) => sum + (c.studentsCount || 0), 0);
+    expect(courses.body.data.length).toBeGreaterThan(1);
+    expect(queue.body.data.summary.students).toBeGreaterThan(0);
+    expect(queue.body.data.summary.students).toBeLessThan(summed);
+  });
+});

@@ -354,6 +354,7 @@ export const getGradingQueue = async (req: Request, res: Response, next: NextFun
     type Row = { assignmentId: string; courseId: string; courseCode: string; courseTitle: string; title: string; dueAt: string; maxMarks: number; ungradedCount: number; gradedCount: number; totalStudents: number; oldestSubmittedAt: string | null; lateCount: number };
     let rows: Row[] = [];
     let classes = 0;
+    let students = 0;
 
     if (isSupabaseConfigured() && user.isDemoUser !== true) {
       let courseIds: string[];
@@ -368,6 +369,9 @@ export const getGradingQueue = async (req: Request, res: Response, next: NextFun
       }
       classes = courseIds.length;
       if (courseIds.length) {
+        const { data: roster, error: rosterError } = await supabaseAdmin.from('enrollments').select('student_id').in('course_id', courseIds);
+        if (rosterError) throw rosterError;
+        students = new Set((roster || []).map(row => row.student_id)).size;
         const [{ data: courses, error: courseError }, { data: assignments, error: assignmentError }, { data: enrollments, error: enrollmentError }] = await Promise.all([
           supabaseAdmin.from('courses').select('id,code,title').in('id', courseIds),
           supabaseAdmin.from('assignments').select('id,course_id,title,due_at,max_marks,submissions(id,submitted_at,marks_obtained,is_late)').in('course_id', courseIds),
@@ -397,6 +401,7 @@ export const getGradingQueue = async (req: Request, res: Response, next: NextFun
         ? mockDb.courses.filter(course => !course.isArchived).map(course => course.id)
         : mockDb.courseTeachers.filter(link => link.teacherId === user.id).map(link => link.courseId);
       classes = myCourseIds.length;
+      students = new Set(mockDb.enrollments.filter(e => myCourseIds.includes(e.courseId)).map(e => e.studentId)).size;
       rows = mockDb.assignments.filter(item => myCourseIds.includes(item.courseId)).map(item => {
         const course = mockDb.courses.find(entry => entry.id === item.courseId);
         const submissions = mockDb.submissions.filter(s => s.assignmentId === item.id);
@@ -412,7 +417,7 @@ export const getGradingQueue = async (req: Request, res: Response, next: NextFun
     }
 
     const items = rows.filter(row => row.ungradedCount > 0).sort((a, b) => Date.parse(a.oldestSubmittedAt || '') - Date.parse(b.oldestSubmittedAt || ''));
-    return res.status(200).json({ data: { items, summary: { ungradedTotal: items.reduce((sum, row) => sum + row.ungradedCount, 0), assignmentsToGrade: items.length, classes } } });
+    return res.status(200).json({ data: { items, summary: { ungradedTotal: items.reduce((sum, row) => sum + row.ungradedCount, 0), assignmentsToGrade: items.length, classes, students } } });
   } catch (error) {
     next(error);
   }
